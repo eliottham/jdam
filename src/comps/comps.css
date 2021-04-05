@@ -1,0 +1,122 @@
+.MuiButton-root.jd-button {
+  color: var(--primary);
+}
+
+.MuiButton-root.jd-button.Mui-disabled {
+  background-color: var(--lt-grey);
+}
+
+.MuiTab-root.MuiTab-textColorPrimary {
+  color: var(--primary);
+}
+
+.MuiTab-root.MuiTab-textColorPrimary.Mui-selected {
+  color: var(--d-primary);
+}
+
+.MuiTabs-indicator {
+  background-color: var(--d-primary) !important;
+}
+
+.form-label {
+  font-variant: all-small-caps;
+  font-size: 1.5rem; 
+  padding: 0.2em;
+}
+
+.form-field {
+  position: relative;
+  width: 400px;
+  margin-bottom: 1em;
+}
+
+.form-field input {
+  width: 100%;
+  padding: 0.4em;
+  font-size: 1.2rem;
+  border-radius: 4px;
+  outline: none;
+  border: 1px solid var(--grey);
+  background-color: var(--slt-grey);
+  transition: all 100ms;
+}
+
+.form-field input.filled {
+  --col-s: var(--lt-blue-s);
+  border-color: rgb(var(--col-s));
+  background-color: rgba(var(--col-s), 0.2);
+}
+
+.form-field input.filled.invalid {
+  --col-s: var(--red-s);
+}
+
+.form-field.confirm input:first-child {
+  border-radius: 4px 4px 0 0;
+  border-bottom-color: var(--lt-grey);
+}
+
+.form-field.confirm input.confirm {
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+}
+
+.form-field.confirm input.confirm::placeholder {
+  color: var(--lt-grey);
+  font-variant: all-small-caps;
+  font-weight: 400;
+  font-family: 'Lato', sans-serif;
+}
+
+.form-field > .error {
+  color: var(--red);
+}
+
+.icon {
+  --icon-size: 128px;
+  --icon-col: var(--primary);
+  width: var(--icon-size);
+  height: var(--icon-size);
+  box-sizing: border-box;
+  fill: var(--icon-col);
+}
+
+.icon * {
+  vector-effect: non-scaling-stroke;
+}
+
+.icon.box {
+  padding: 4px;
+  border: 1px solid var(--white);
+  border-radius: 8px;
+}
+
+.icon.medium {
+  --icon-size: 64px;
+}
+
+.icon.small {
+  --icon-size: 32px;
+}
+
+.icon.small-material {
+  --icon-size: 24px;
+}
+
+.icon.tiny {
+  --icon-size: 16px;
+}
+
+.icon.red {
+  --icon-col: var(--red);
+}
+
+.icon.white {
+  --icon-col: white;
+}
+
+.icon.outline-only {
+  fill: none;
+  stroke: var(--icon-col);
+  stroke-width: 1.5px;
+}

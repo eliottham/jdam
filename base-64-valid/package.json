@@ -1,0 +1,11 @@
+{
+  "name": "base-64-valid",
+  "version": "1.0.0",
+  "description": "checks if it is valid base64",
+  "main": "index.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "gheld",
+  "license": "ISC"
+}

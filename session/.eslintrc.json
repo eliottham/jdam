@@ -1,0 +1,12 @@
+{
+  "parserOptions": {
+    "sourceType": "module"
+  },
+  "ignorePatterns": [ ".eslintrc.json" ],
+  "settings": {
+    "react": {
+      "pragma": "React",
+      "version": "detect"
+    }
+  }
+}

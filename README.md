@@ -14,7 +14,7 @@ _It's the bomb_
   - This allows for effects like reverb and delay to go "past" the end of the
     loop and be blended in with the next playback of that loop
 * Tree-based organization
-  - each "node" contains an new audio file and any audio files from its parent
+  - each "node" contains a new audio file and any audio files from its parent
     nodes
   - each node can be given children to iterate over several ideas
   - for the sake of bandwidth and processing constraints on the web, limit each
