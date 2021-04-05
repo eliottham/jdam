@@ -34,6 +34,6 @@ _It's the bomb_
 * This probably needs a custom docker network that can support Class A, because
   there is no way that there are enough ports to scale up
 * Persistent storage
-  - MySQL
+  - MongoDB
   - Store information about users and their sessions
   - Potentially store final renders (but only final renders)
