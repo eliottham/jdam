@@ -1,18 +1,22 @@
 import Express from 'express'
 import cookieParser from 'cookie-parser'
-import fs, { promises as fsp } from 'fs'
 import crypto from 'crypto'
 import WS from 'express-ws'
 import WebSocket from 'ws'
+import { exec } from 'child_process'
+import SessionOps from './session_ops.mjs'
 import Mongo from 'mongodb'
-const { MongoClient } = Mongo
+import net from 'net'
+const { MongoClient, ObjectID } = Mongo
 
 const PORT = 54049
 const MONGO_URL = 'mongodb://localhost:27017'
 const MONGO_DB_NAME = 'jdam'
+const NO_DOCKER = process.env.NO_DOCKER === 'true' ?  true : false
 
 const mongoClient = new MongoClient(MONGO_URL, { useUnifiedTopology: true })
 let db
+let sessionOps
 
 const AUTH_COOK = 'auth-token'
 const EXPIRATION_THRESHOLD = (10 * 60 * 1000) /* 10 minutes in ms */
@@ -21,6 +25,7 @@ const EXPIRATION_THRESHOLD = (10 * 60 * 1000) /* 10 minutes in ms */
 /* new express app */
 const appBase = Express()
 const { app } = WS(appBase)
+// const app = appBase
 app.use(Express.static('public'))
 
 /* remember to use the json body-parser */
@@ -28,18 +33,26 @@ app.use(Express.json())
 app.use(cookieParser())
 
 /* 
- * keep track of active sessions
+ * keep track of active authSessions
  *
- * key is a token, value is a session obj
+ * key is a token, value is a authSession obj
  * {
  *   expires: time in ms
  *   client: websocket client
  * }
  * new requests will refresh the expiration time
  */
-const sessionMap = new Map()
+const authSessionMap = new Map()
 
-app.ws('/', ws => {
+/* 
+ * a "reverse map" of the above, maps accountId to the token value 
+ *
+ * this can be used to quickly get the token by index and then message an 
+ * account based on its ID value
+ */
+const accountAuthMap = new Map()
+
+app.ws('/ws', ws => {
   ws.send('connected')
   ws.on('message', msg => {
     if (typeof msg === 'string') {
@@ -48,10 +61,25 @@ app.ws('/', ws => {
       switch (prefix) {
       case 'tok':
       {
-        const session = data
-        const sessionObj = sessionMap.get(session) 
-        if (sessionObj) {
-          sessionObj.client = ws
+        const authSession = data
+        const authSessionObj = authSessionMap.get(authSession) 
+        if (authSessionObj) { authSessionObj.client = ws }
+
+        break
+      }
+      case 'jam': {
+        try {
+          const json = JSON.parse(data)
+          const { token, sessionId } = json
+          checkAuth({ token })
+
+          sessionOps.write(sessionId, data)
+
+        } catch (err) {
+          /* 
+           * do nothing, the client is trashe if they think they can just NOT
+           * send json, or they aren't with a valid session
+           */
         }
         break
       }
@@ -79,17 +107,16 @@ async function managementLoop() {
   setTimeout(managementLoop, getMsFromNow()) 
 
   /* 
-   * prune sessions every two minutes 
+   * prune authSessions every two minutes 
    */
 
   const now = Date.now()
   if ((now + 5000) % (60 * 2 * 1000) < 10000) {
-    for (const [ key, value ] of sessionMap.entries()) {
+    for (const [ key, value ] of authSessionMap.entries()) {
       if (now > value.expires) {
-        if (value.client) {
-          messageClient(value.client, `ses:${JSON.stringify({ expired: true })}`)
-        }
-        sessionMap.delete(key)
+        if (value.client) { messageClient(value.client, `ses:${JSON.stringify({ expired: true })}`) }
+        if (value.id) { accountAuthMap.delete(value.id) }
+        authSessionMap.delete(key)
       }
     }
   }
@@ -118,13 +145,11 @@ function dateStringIsValid(dateString) {
  * 2. ...and validate that the hash(value) matches,
  *    otherwise throw a "credentials invalid" error
  */
-async function validateLogin(hash) {
+async function validateLogin(email, hash) {
   if (!db) { throw new Error('Database not found') }
 
-  const profiles = db.collection('profiles')
-
   /* look through profiles to find one matching the email */
-  const profile = await getAccount({ hash }) 
+  const profile = await getAccount({ email }) 
 
   if (!profile) {
     throw new Error('Account not found')
@@ -142,26 +167,30 @@ async function createAccount({ email, hash, nickname }) {
 
   try {
     const profiles = db.collection('profiles')
-    const { upsertedId, error } = await profiles.updateOne(
+    const { upsertedId } = await profiles.updateOne(
       { email },
-      { '$setOnInsert': {email, hash, nickname }},
+      { '$setOnInsert': { email, hash, nickname, sessions: [] }},
       { upsert: true }
     )
-    if (error) {
-      throw error 
-    }
     return { _id: upsertedId._id, email, hash, nickname }
-  } catch (errObject) {
+  } catch (err) {
     throw new Error('Account not created')
   }
 
 }
 
-async function getAccount({ hash, id }) {
+async function getAccount({ hash, id, email }) {
   if (!db) { throw new Error('Database not found') }
 
   const profiles = db.collection('profiles')
-  const profile = id ? await profiles.findOne({ _id: id }) : await profiles.findOne({ hash })
+  let profile
+  if (id) {
+    profile = await profiles.findOne({ _id: new ObjectID(id) })
+  } else if (hash) {
+    profile = await profiles.findOne({ hash })
+  } else if (email) {
+    profile = await profiles.findOne({ email })
+  }
 
   return profile
 }
@@ -172,75 +201,105 @@ function generateSessionToken(withAccountId) {
   crypto.randomFillSync(byteBuffer)
   const date = new Date()
   const b64 = byteBuffer.toString('base64')
-  sessionMap.set(b64, { expires: date.valueOf() + EXPIRATION_THRESHOLD, ...!!withAccountId && { id: withAccountId }})
+  authSessionMap.set(b64, { expires: date.valueOf() + EXPIRATION_THRESHOLD, ...!!withAccountId && { id: withAccountId }})
+  if (withAccountId) { accountAuthMap.set(withAccountId, b64) }
   return b64
 }
 
-function checkSession(req, res) {
+function checkAuth({ req, res, token }) {
 
-  if (req.cookies[AUTH_COOK]) {
-    const token = req.cookies[AUTH_COOK]
-    refreshSession(token, res)
-    const dateValue = new Date().valueOf()
-    const expirationValue = sessionMap.get(token)
-    if (!expirationValue) {
-      throw Error('Session not found')
+  if (req) {
+    if (req.cookies[AUTH_COOK]) {
+      token = req.cookies[AUTH_COOK]
+    } else {
+      throw Error('Session not present')
     }
-
-    if (dateValue > expirationValue.expires) {
-      sessionMap.delete(token)
-      throw Error('Session expired')
-    }
-
-    return { token, ...expirationValue }
   }
-  
-  throw Error('Session not present')
+
+  refreshSession({ token, res })
+
+  const dateValue = new Date().valueOf()
+  const authSessionObj = authSessionMap.get(token)
+  if (!authSessionObj) {
+    throw Error('Session not found')
+  }
+
+  if (dateValue > authSessionObj.expires) {
+    authSessionMap.delete(token)
+    if (authSessionObj.id) { accountAuthMap.delete(authSessionObj.id) }
+    throw Error('Session expired')
+  }
+
+  return { token, ...authSessionObj }
 
 }
 
-function refreshSession(token, res) {
+/* 
+ * handler can be async, but that shouldn't matter because we aren't doing any
+ * work after it
+ *
+ * this function returns an async function that consumes the req and res
+ * objects passed by express
+ */
+function useAuth(handler) {
+  return (req, res) => {
+    try {
+      /* 
+       * pass the results of checkAuth to the 
+       * third param of the handler function 
+       */
+      handler(req, res, checkAuth({ req, res }))
+    } catch (err) {
+      res.status(410).json({ success: false, errors: [ err.message ] })
+    }
+  }
+}
+
+function refreshSession({ token, res }) {
   const dateValue = new Date().valueOf()
-  const expirationValue = sessionMap.get(token)
+  const authSessionObj = authSessionMap.get(token)
   /* 
    * remember to also refresh the auth-cook on the client, so it doesn't expire
    * after refreshing
    */
-  if (res) res.cookie(AUTH_COOK, token, { maxAge: EXPIRATION_THRESHOLD, httpOnly: true })
-  if (!expirationValue) {
+  if (res) { res.cookie(AUTH_COOK, token, { maxAge: EXPIRATION_THRESHOLD, httpOnly: true }) }
+  if (!authSessionObj) {
     throw Error('Session not found')
   }
 
-  expirationValue.expires = dateValue + EXPIRATION_THRESHOLD
+  authSessionObj.expires = dateValue + EXPIRATION_THRESHOLD
   return dateValue
 }
 
-app.get('/sessions', (req, res) => {
-  let output = ''
-  for (const [ key, value ] of sessionMap.entries()) {
-    output += `${key}: ${value.expires} ${value.client ? 'client connected' : ''}, id: ${value.id ? value.id : ''}\n`
+app.get('/auth-sessions', (req, res) => {
+  let output = 'auth-sessions\n'
+  for (const [ key, value ] of authSessionMap.entries()) {
+    output += `${key}: ${value.expires}, ${value.client ? 'client connected' : ''}, id: ${value.id ? value.id : ''}\n`
+  }
+  output += '\naccount-auths\n'
+  for (const [ key, value ] of accountAuthMap.entries()) {
+    output += `${key}: ${value ? 'client connected' : ''}`
   }
   res.status(200).write(output, () => { res.end() })
 })
 
-app.get('/account', async (req, res) => {
-  try {
-    const { id } = checkSession(req, res)
-    const profile = await getAccount({ id })
-    if (!profile) {
-      res.status(404).json({ success: false, errors: [ 'Account not found' ]})
-      return
-    }
-
-    /* don't pass the hash down to the client */
-    delete profile.hash
-    res.status(200).json({ success: true, account: profile })  
-  } catch (err) {
-    res.status(410).json({ success: false, errors: [ err.message ] })
+app.get('/account', useAuth(async (req, res, auth) => {
+  const { id } = auth 
+  const profile = await getAccount({ id })
+  if (!profile) {
+    res.status(404).json({ success: false, errors: [ 'Account not found' ]})
     return
   }
-})
 
+  /* don't pass the hash down to the client */
+  delete profile.hash
+  res.status(200).json({ success: true, account: profile })  
+}))
+
+/* 
+ * this function does NOT require auth -- in fact, it MUST NOT in order to
+ * allow anyone to create a new account
+ */
 app.post('/account', async (req, res) => {
   if (!db) {
     res.status(404).json({ success: false, errors: [ 'Database not found' ] })
@@ -283,9 +342,11 @@ app.post('/account', async (req, res) => {
 
 })
 
+/* this one also requires auth to be disabled for validation */
 app.post('/account/available', async (req, res) => {
 
   let { email } = req.body
+  
   if (!email) {
     res.status(404).json({ success: false, errors: [ 'email must not be empty' ] })
     return
@@ -312,21 +373,40 @@ app.post('/account/available', async (req, res) => {
 
 })
 
+app.post('/account/sessions', useAuth(async (req, res, auth) => {
+  const { id } = auth
+  const profile = await getAccount({ id })
+  if (!profile) {
+    res.status(404).json({ success: false, errors: [ 'Account not found' ]})
+    return
+  }
+
+  const { sessionIds = [] } = profile.sessions
+
+  const sessions = []
+  res.status(200).json({ success: true, sessions })  
+}))
+
 app.get('/bounce', (req, res) => {
   try {
-    res.json({ success: true, token: checkSession(req, res).token })
+    res.json({ success: true, token: checkAuth({ req, res }).token })
     return 
   } catch (err) {
     res.status(400).json({ success: false, errors: [ err.message ] })
   }
 })
 
+/* 
+ * this function does not use useAuth because errors MUST be ignored for
+ * correct functionality
+ */
 app.post('/auth', async (req, res) => {
+
   const { email, hash } = req.body
 
   /* check for auth-token cookie */
   try {
-    const { token, id } = checkSession(req, res)
+    const { token, id } = checkAuth({ req, res })
     res.json({ success: true, token, id })
     return 
   } catch (err) {
@@ -340,7 +420,7 @@ app.post('/auth', async (req, res) => {
   let profile = {}
   if (!errors.length) {
     try {
-      profile = await validateLogin(hash)
+      profile = await validateLogin(email, hash)
     } catch (err) {
       errors.push(err.message)
     }
@@ -354,39 +434,107 @@ app.post('/auth', async (req, res) => {
     return
   }
 
-  const token = generateSessionToken(profile._id)
+  const token = generateSessionToken(profile._id.toString())
 
   res.cookie(AUTH_COOK, token, { maxAge: EXPIRATION_THRESHOLD, httpOnly: true })
 
   res.json({ success: true, token, id: profile._id })
 })
 
-app.get('/unauth', (req, res) => {
-  try {
-    const { token } = checkSession(req, res)
-    if (token) {
-      const sessionObj = sessionMap.get(token) 
-      const sendString = JSON.stringify({ expired: true, loggedOff: true })
-      sessionObj?.client?.send(`ses:${sendString}`)
-      sessionMap.delete(token)
-      res.status(200).json({ success: true })
-      return 
-    }
-  } catch (err) {
-    res.status(410).json({ success: false, errors: [ err.message ] })
-    return
+app.get('/unauth', useAuth((req, res, auth) => {
+  const { token } = auth 
+  if (token) {
+    const authSessionObj = authSessionMap.get(token) 
+    const sendString = JSON.stringify({ expired: true, loggedOff: true })
+    authSessionObj?.client?.send(`ses:${sendString}`)
+    authSessionMap.delete(token)
+    if (authSessionObj.id) { accountAuthMap.delete(authSessionObj.id) }
+    res.status(200).json({ success: true })
+    return 
   }
 
   res.status(410).json({ success: false, errors: [ 'Invalid token' ] })
+}))
+
+function handleSocketResponse(res, containerId) {
+  const { connectedAccounts = [] } = res
+  res.sessionId = containerId
+
+  for (const connectedAccount of connectedAccounts) {
+    const token = accountAuthMap.get(connectedAccount)
+    const authSessionObj = authSessionMap.get(token)
+    if (authSessionObj.client) {
+      authSessionObj.client.send('jam:' + JSON.stringify(res)) 
+    }
+  }
+}
+
+app.put('/session/create', useAuth(async (req, res, auth) => {
+  const { id, token } = auth 
+
+  const { name } = req.body
+
+  if (!name) { 
+    res.status(400).json({ success: false, errors: [ 'A name must be specified for the session' ] })
+    return 
+  }
+
+  try {
+    const sessionInfo = await sessionOps.createSession({ sessionName: name, accountId: id, token })
+    res.status(200).json({ success: true, ...sessionInfo })
+  } catch (err) {
+    res.status(400).json({ success: false, errors: [ err.message ] })
+  }
+}))
+
+app.post('/session/find', useAuth(async (req, res, auth) => {
+  const { id } = auth
+  const { name } = req.body
+
+  try {
+    const results = await sessionOps.findSessions({ name, accountId: id })
+    res.status(200).json({ success: true, sessions: results })
+  } catch (err) {
+    res.status(400).json({ success: false, errors: [ err.message ] })
+  }
+}))
+
+app.put('/session/join', useAuth(async (req, res, auth) => {
+  const { id, token } = auth
+
+  const { sessionId } = req.body
+  if (!sessionId) { 
+    res.status(400).json({ success: false, errors: [ 'A name must be specified for the session' ] })
+    return 
+  }
+
+  try {
+    sessionOps.joinSession({ sessionId, accountId: id })
+    res.status(200).json({ success: true })
+  } catch (err) {
+    res.status(400).json({ success: false, errors: [ err.message ] })
+  }
+}))
+
+app.get('/sessions', (req, res) => {
+  let output = ''
+  for (const [ key, value ] of sessionOps.getSessions()) {
+    output += `${key}: ${value ? 'socket connected' : ''}\n`
+  }
+  res.status(200).write(output, () => { res.end() })
 })
 
 async function begin() {
+
+  /* eliminate any running docker containers for jdam/test */
+  exec('bash -c "docker rm -f $(docker ps -aq -f ancestor=jdam/test)"')
 
   try {
     await mongoClient.connect()
     console.log('Connected successfully to server')
 
     db = mongoClient.db(MONGO_DB_NAME)
+    sessionOps = new SessionOps({ db, responseHandler: handleSocketResponse })
   } catch (err) {
     /* do nothing */
     console.dir(err)

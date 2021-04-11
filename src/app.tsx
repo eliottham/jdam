@@ -1,27 +1,115 @@
-import './app.css'
 import JdamClient from './client/jdam_client'
 import { useEffect, useState, useRef, RefObject } from 'react'
 import { 
   Dialog,
-  DialogActions,
   DialogContent,
   Tabs,
   Tab,
   Button,
-  Card
+  Card,
+  ThemeProvider
 } from '@material-ui/core'
 import { CSSTransition } from 'react-transition-group'
-import { FormField, Icon } from './comps/comps'
+import { FormField, FormFieldTemplate, Icon } from './comps/comps'
 import Workspace from './workspace/workspace'
 
+import { createMuiTheme } from '@material-ui/core/styles'
+import { makeStyles } from '@material-ui/styles'
+
+const theme = createMuiTheme({
+  palette: {
+    primary: {
+      main: '#e37922',
+      contrastText: '#fff'
+    }
+  }
+})
+
+const useStyles = makeStyles({
+  loginDialog: {
+    '& > .MuiDialog-container > .MuiPaper-root': {
+      maxWidth: '100%',
+      minWidth: 500,
+      height: 500,
+      flexDirection: 'row',
+      '& .splash': {
+        width: 400,
+        height: '100%',
+        backgroundImage: [ 
+          'linear-gradient(160deg, var(--lt-yellow), transparent)',
+          'radial-gradient(ellipse 150% 150% at 0% 100%, var(--primary), transparent)',
+          'radial-gradient(ellipse 150% 150% at 100% 100%, var(--red), transparent)' 
+        ].join(', ')
+      }
+    },
+    '& .content-wrapper': {
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%'
+    },
+    '& .grid-wrapper': {
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingTop: 24,
+      '& .grid': {
+        display: 'grid',
+        gridTemplateColumns: 'max-content 1fr',
+        gridGap: '0.5em'
+      }
+    }
+  },
+  launchButton: {
+    '&.MuiButton-root': {
+      margin: '12px 24px 24px'
+    }
+  },
+  authError: {
+    fontSize: '1.1rem',
+    color: 'var(--red)'
+  },
+  errors: {
+    '&.MuiCard-root': {
+      padding: '1em',
+      color: 'white',
+      backgroundColor: 'var(--red)',
+      borderRadius: 4,
+      margin: '12px 24px',
+      transition: 'all 500ms var(--ease-out)',
+      overflow: 'hidden',
+      boxSizing: 'content-box',
+      '& $authError': {
+        color: 'white'
+      }
+    },
+    '&.enter': {
+      margin: '0 24px',
+      padding: '0 1em'
+    },
+    '&.enter-active, &.exit': {
+      margin: '12px 24px',
+      padding: '1em'
+    },
+    '&.exit-active': {
+      margin: '0 24px',
+      padding: '0 1em'
+    }
+  }
+})
+
 /* Login / Account creation dialog */
-function LoginDailog( props: { 
+interface LoginDialogProps { 
   open: boolean,
   errors: string[],
   showErrors?: boolean,
   tabIndex?: number,
   client: JdamClient,
-  onSubmit: (params: { email: string, password: string, nickname?: string, newAccount: boolean }) => void }): JSX.Element {
+  onSubmit: (params: { email: string, password: string, nickname?: string, newAccount: boolean }) => void 
+}
+
+function LoginDialog( props: LoginDialogProps): JSX.Element {
+
+  const classes = useStyles()
 
   const [ tabIndex, setTabIndex ] = useState(props.tabIndex ?? 0)
   /* keep track of field values for submission */
@@ -68,38 +156,11 @@ function LoginDailog( props: {
 
   const errorsRef = useRef<HTMLDivElement>(null)
 
-  const validatePassword = (pass: string): string[] => {
-    const errors = []
-    if (!pass) { return [] }
-    pass = pass.trim() 
-    if (!pass) { return [ 'password must not be blank' ] }
-    if (pass.length < 12) { errors.push('password must be longer than 12 characters') }
-    if (pass.length > 32) { errors.push('you have to be able to remember the password') }
-    if (/^[A-Za-z0-9]+$/.test(pass)) { errors.push('password must contain special characters') }
-    return errors
-  }
-
-  interface FieldTemplate {
-    name: string,
-    label?: string,
-    type?: string,
-    confirm?: boolean,
-    validation: (input: string) => string[],
-    latentValidation?: (input: string) => Promise<string[]>
-  }
-
-  const fieldTemplates: Array<FieldTemplate> = [ 
+  const fieldTemplates: Array<FormFieldTemplate> = [ 
     {
       name: 'email',
       label: 'email',
-      validation: (email: string): string[] => {
-        const errors = []
-        if (!email) { return [] }
-        email = email.trim() 
-        if (!email) { return [ 'email must not be blank' ] }
-        if (!/^\w[^@]+@[^.]+\.\w+/.test(email)) { errors.push('email is invalid') }
-        return errors
-      },
+      validation: props.client.validation.validateEmail,
       latentValidation: async (email: string): Promise<string[]> => {
         const errors = []
         const { success } = await props.client.checkAccountAvailable(email)
@@ -111,17 +172,11 @@ function LoginDailog( props: {
       label: 'password',
       type: 'password',
       confirm: true,
-      validation: validatePassword 
+      validation: props.client.validation.validatePassword
     }, {
       name: 'nickname',
       label: 'nickname',
-      validation: (nick: string): string[] => {
-        const errors = []
-        if (nick.trim()) {
-          if (nick.length > 25) { errors.push('nickname must be less than 25 characters') }
-        }
-        return errors
-      }
+      validation: props.client.validation.validateNickname
     } ]
     
 
@@ -147,15 +202,17 @@ function LoginDailog( props: {
   }
 
   /* create a form field and setup all it's handlers */
-  const _field = (template: FieldTemplate, validation: boolean, last: boolean): JSX.Element => {
+  const _field = (template: FormFieldTemplate, validation: boolean, last: boolean): JSX.Element => {
     const handleFieldChange = (input: string) => {
       const newFields = { ...formFields }
       newFields[template.name] = input
       setFormFields(newFields)
     }
-    const handleEnter = (input: string, isConfirm: boolean) => {
+
+    const handleEnter = () => {
       last && handleSubmit()
     }
+
     const handleFieldValidate = (valid: boolean) => {
       const newValidFields = { ...formFieldsValid }
       if (validation) {
@@ -170,6 +227,7 @@ function LoginDailog( props: {
       }
       setFormValid(formValid)
     }
+
     return <FormField 
       validate={ validation } 
       key={ `field-${validation ? 'v-' : ''}${template.name}` } 
@@ -223,13 +281,13 @@ function LoginDailog( props: {
 
   return (
     <Dialog
-      className="login-dialog"
+      className={ classes.loginDialog }
       open={ props.open }
     >
       <div className="splash flex-center" style={{ flexDirection: "column", color: "white" }}>
         <div style={{ fontSize: "2rem", marginBottom: "24px" }}>JDAM</div>
         <Icon url="assets/icons_proc/jdam.svg#jdam" className="white"/>
-        <div style={{ fontSize: "1.2rem", marginTop: "24px" }}>It&apos;s the bomb</div>
+        <div style={{ fontSize: "1.2rem", marginTop: "24px" }}>EXPLOSIVE JAMS!</div>
       </div>
       <div className="content-wrapper">
         <Tabs value={ tabIndex } onChange={ handleTabChange } centered>
@@ -252,11 +310,11 @@ function LoginDailog( props: {
           onExit={()=>heightToContent(errorsRef)}
           onExiting={()=>heightZero(errorsRef)}
         >
-          <Card className="errors" ref={ errorsRef }>
+          <Card className={ classes.errors } ref={ errorsRef }>
             <div>
               { 
                 props.errors.map((err, index) => {
-                  return <div key={ `auth-err-${index}` } className="auth-error">{ err }</div>
+                  return <div key={ `auth-err-${index}` } className={ classes.authError }>{ err }</div>
                 })
               }
             </div>
@@ -266,7 +324,7 @@ function LoginDailog( props: {
           onClick={ handleSubmit } 
           variant="contained" 
           disabled={ !formValid }
-          className="jd-button launch-button">{ tabIndex === 0 ? 'Launch' : 'Create' }
+          className={ classes.launchButton }>{ tabIndex === 0 ? 'Launch' : 'Create' }
         </Button>
       </div>
     </Dialog>
@@ -329,8 +387,10 @@ function App(props: {client: JdamClient}): JSX.Element {
 
   return (
     <div>
-      <LoginDailog open={ !loggedIn } onSubmit={ handleOnSubmit } errors={ authErrors } showErrors={ showErrors } client={ props.client }/>
-      { loggedIn && <Workspace client={ props.client }/> }
+      <ThemeProvider theme={ theme }>
+        <LoginDialog open={ !loggedIn } onSubmit={ handleOnSubmit } errors={ authErrors } showErrors={ showErrors } client={ props.client }/>
+        { loggedIn && <Workspace client={ props.client }/> }
+      </ThemeProvider>
     </div>
   )
 }
