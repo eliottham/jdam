@@ -10,7 +10,8 @@ import {
   ThemeProvider
 } from '@material-ui/core'
 import { CSSTransition } from 'react-transition-group'
-import { FormField, FormFieldTemplate, Icon } from './comps/comps'
+import { FormField, Icon } from './comps/comps'
+import { FormFieldTemplate } from './comps/form_field'
 import Workspace from './workspace/workspace'
 
 import { createMuiTheme } from '@material-ui/core/styles'

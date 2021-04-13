@@ -16,6 +16,11 @@ const sessionMap = new Map()
 
 const pendingSessions = new Map()
 
+/* 
+ * this is necessary in order to know when a session container has been fully
+ * started. Otherwise the client socket connects before the other side
+ * opens, and then instantly terminates.
+ */
 const sessionListener = net.createServer(socket => {
   socket.once('data', data => {
     try {

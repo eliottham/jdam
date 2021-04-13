@@ -5,11 +5,12 @@ import {
   Drawer,
   Divider,
   List,
-  Fab,
-  Dialog
+  Fab
 } from '@material-ui/core'
 import AddIcon from '@material-ui/icons/Add'
-import { FormField, FormFieldTemplate } from '../comps/comps'
+import GroupIcon from '@material-ui/icons/Group'
+
+import SessionDialog from './session_dialog'
 
 import { makeStyles } from '@material-ui/styles'
 
@@ -38,35 +39,9 @@ const useStyles = makeStyles({
       flexDirection: 'column',
       alignItems: 'center'
     }
-  },
-  sessionDialog: {
-    minWidth: 500,
-    minHeight: 500
   }
 })
 
-interface SessionDialogProps { 
-  open: boolean,
-  tabIndex?: number,
-  client: JdamClient,
-  onSubmit: (params: { join: boolean, name: string, length: string }) => void 
-  onClose: () => void
-}
-
-function SessionDialog(props: SessionDialogProps) {
-
-  const classes = useStyles()
-  return (
-    <Dialog
-      open={ props.open }
-      onClose={ props.onClose }
-    >
-      <div className={ `${classes.sessionDialog} flex-center` }>
-        Creat
-      </div>
-    </Dialog>
-  )
-}
 
 function Workspace(props: { client: JdamClient }) {
 
@@ -74,6 +49,7 @@ function Workspace(props: { client: JdamClient }) {
 
   const [ activeSession, setActiveSession ] = useState<Session>()
   const [ creatingSession, setCreatingSession ] = useState(false)
+  const [ tabIndex, setTabIndex ] = useState(0)
 
   useEffect(() => {
     const onSetActiveSession = ({ session }: { session: Session }) => {
@@ -97,12 +73,13 @@ function Workspace(props: { client: JdamClient }) {
     setCreatingSession(true)
   }
 
-  const handleOnSubmitSession = ({ join = false, name }: { join: boolean, name: string }) => {
-    if (!join) { props.client.createSession({ name }) }
+  const handleOnSubmitSession = ({ join = false, name, length }: { join: boolean, name: string, length: number }) => {
+    if (!join) { props.client.createSession({ name, sessionLength: length }) }
   }
 
   const handleOnCloseSessionDialog = () => {
     setCreatingSession(false)
+    setTabIndex(0)
   }
 
   return (
@@ -123,13 +100,15 @@ function Workspace(props: { client: JdamClient }) {
         <Fab color="primary" onClick={ handleOnCreateSession }>
           <AddIcon/>
         </Fab>
+        <SessionDialog 
+          client={ props.client }
+          open={ creatingSession }
+          tabIndex={ tabIndex }
+          setTabIndex={ setTabIndex }
+          onClose={ handleOnCloseSessionDialog }
+          onConfirm={ handleOnSubmitSession }
+        />
       </Drawer>
-      <SessionDialog 
-        client={ props.client }
-        open={ creatingSession }
-        onSubmit={ handleOnSubmitSession }
-        onClose={ handleOnCloseSessionDialog }
-      />
       <div className="content">
         Workspace
       </div>
