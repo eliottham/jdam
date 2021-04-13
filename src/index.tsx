@@ -12,7 +12,7 @@ const jdamClient = new JdamClient()
 
 /* this is for debugging purposes only */
 window.jdamClient = jdamClient
-jdamClient.logon('', '', true)
+jdamClient.logon('gheld@x.com', 'testpassword!', true)
 
 ReactDOM.render(
   <App client={ jdamClient }/>,

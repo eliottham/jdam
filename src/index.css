@@ -42,10 +42,12 @@
   --orange-s: 227, 121, 34;
   --orange: rgb(var(--orange-s));
   --d-orange-s: 171, 90, 36;
-  --d-orange: rgb(var(--orange-s));
+  --d-orange: rgb(var(--d-orange-s));
   --ease-out: cubic-bezier(0.17, 0.57, 0.43, 1);
   --primary: var(--orange);
+  --primary-s: var(--orange-s);
   --d-primary: var(--d-orange);
+  --d-primary-s: var(--d-orange-s);
   font-family: 'Lato', sans-serif;
 }
 

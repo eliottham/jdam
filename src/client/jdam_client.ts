@@ -2,6 +2,7 @@ import Evt from './evt'
 import Session from './session'
 import Settings from './settings'
 import base64Valid from 'base-64-valid'
+import Validation from './validation'
 
 class ClientSettings extends Settings {
 }
@@ -21,6 +22,7 @@ class JdamClient extends Evt {
   sessions: Map<string, Session> = new Map()
   activeSession = ''
   settings = new ClientSettings()
+  validation = new Validation()
 
   constructor(params?: JdamClientParams) {
     super()
@@ -49,7 +51,7 @@ class JdamClient extends Evt {
         this.webSocket.close()
       }
 
-      this.webSocket = new WebSocket(`ws://${location.host}`)
+      this.webSocket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`)
       this.webSocket.addEventListener('error', () => {
         const message = 'Real-time connection to serverino encountered an error'
         reject(Error(message))
@@ -80,21 +82,9 @@ class JdamClient extends Evt {
   }
 
   async checkAccountAvailable(email: string): Promise<{ success: boolean, errors?: string[] }> {
-    try {
-      const response = await fetch('account/available', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email })
-      })
-      const responseJson = await response.json()
-      this.fire('check-account-available', responseJson)
-      return (responseJson)
-    } catch (err) {
-      /* do nothing */
-    }
-    return { success: false }
+    const responseJson = await this.validation.checkAccountAvailable(email)
+    this.fire('check-account-available', responseJson)
+    return responseJson
   }
 
   async createAccount(params: { email: string, password: string, nickname?: string} ) {
@@ -176,16 +166,35 @@ class JdamClient extends Evt {
     this.fire('logoff', responseJson)
   }
 
+  async createSession({ name, sessionLength = 1 }: { name: string, sessionLength?: number }) {
+    try {
+      const response = await fetch('session/create', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name, sessionLength })
+      })
+      const responseJson = await response.json()
+      const { sessionId } = responseJson
+      const newSession = new Session({ sessionId })
+      this.sessions.set(sessionId, newSession)
+      this.fire('create-session', { sessionId, newSession })
+    } catch (err) {
+      /* do nothing */
+    }
+  }
+
   getSessions(): Session[] {
     return Array.from(this.sessions.values())
   }
 
-  setActiveSession(uuid: string) {
-    const session = this.sessions.get(uuid)
+  setActiveSession(sessionId: string) {
+    const session = this.sessions.get(sessionId)
     if (!session) return
 
-    this.activeSession = uuid
-    this.fire('active-session', { uuid, session })
+    this.activeSession = sessionId
+    this.fire('active-session', { sessionId, session })
   }
   
 }

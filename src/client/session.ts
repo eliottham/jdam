@@ -6,8 +6,12 @@ class SessionSettings extends Settings {
 }
 
 interface SessionParams {
+  sessionId: string
   nodes?: LoopNode[]
-  uuid?: string
+}
+
+interface ResponseData {
+  connectedAccounts?: string[]
 }
 
 /* 
@@ -16,23 +20,25 @@ interface SessionParams {
  */
 class Session extends Evt {
   nodes: LoopNode[] = []
-  uuid = ''
+  sessionId = ''
   authToken = ''
   title = ''
   description = ''
   color = '' /* hex value */
   userCount = 0
-  webSocket: WebSocket | undefined
   settings = new SessionSettings()
 
   constructor(params: SessionParams) {
     super()
     Object.assign(this, {}, params)
 
-    if (!this.uuid) {
-      /* generate crypto-random uuid */
-    }
+    if (!params.sessionId) { throw Error('session id is required') }
   }
+
+  handleResponse(params: ResponseData) {
+    /* TODO: all of the possible responses */
+  }
+
 }
 
 export default Session
