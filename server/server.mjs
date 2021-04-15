@@ -6,7 +6,6 @@ import WebSocket from 'ws'
 import { exec } from 'child_process'
 import SessionOps from './session_ops.mjs'
 import Mongo from 'mongodb'
-import net from 'net'
 const { MongoClient, ObjectID } = Mongo
 
 const PORT = 54049
@@ -500,11 +499,11 @@ app.post('/session/find', useAuth(async (req, res, auth) => {
 }))
 
 app.put('/session/join', useAuth(async (req, res, auth) => {
-  const { id, token } = auth
-
+  const { id } = auth
   const { sessionId } = req.body
+
   if (!sessionId) { 
-    res.status(400).json({ success: false, errors: [ 'A name must be specified for the session' ] })
+    res.status(400).json({ success: false, errors: [ 'A session ID is required in order to join a session' ] })
     return 
   }
 

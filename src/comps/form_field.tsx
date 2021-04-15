@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   LinearProgress
 } from '@material-ui/core'
@@ -41,6 +41,12 @@ const useStyles = makeStyles({
         '&.invalid': {
           '--col-s': 'var(--red-s)'
         }
+      },
+      '&::placeholder': {
+        color: 'var(--lt-grey)',
+        fontVariant: 'all-small-caps',
+        fontWeight: 400,
+        fontFamily: "'Lato', sans-serif"
       }
     },
     '&.confirm input': {
@@ -50,13 +56,7 @@ const useStyles = makeStyles({
       },
       '&.confirm': {
         borderTop: 'none',
-        borderRadius: '0 0 4px 4px',
-        '&::placeholder': {
-          color: 'var(--lt-grey)',
-          fontVariant: 'all-small-caps',
-          fontWeight: 400,
-          fontFamily: "'Lato', sans-serif"
-        }
+        borderRadius: '0 0 4px 4px'
       }
     },
     '& .error': {
@@ -67,6 +67,7 @@ const useStyles = makeStyles({
 
 export interface FormFieldTemplate {
     name: string,
+    child?: boolean,
     label?: string,
     type?: string,
     confirm?: boolean,
@@ -180,7 +181,7 @@ function FormField({ fragment = false, ...props }: FormFieldProps): JSX.Element 
     <div className={ `${ classes.formField } ${props.confirm ? 'confirm' : ''}` } key={ `field-${props.name}` }>
       <input 
         type={ props.type ? props.type : "text" }
-        className={ `form-input ${className} ${ fieldValue && props.validate ? 'filled' : ''}` } 
+        className={ `form-input ${className} ${ fieldValue && props.validate && props.validation ? 'filled' : ''}` } 
         onChange={ onChange }
         value={ props.value }
         onKeyUp={ onKeyupHandler }
@@ -189,7 +190,7 @@ function FormField({ fragment = false, ...props }: FormFieldProps): JSX.Element 
       { props.confirm &&
         <input 
           type={ props.type ? props.type : "text" }  
-          className={ `form-input confirm ${className} ${ fieldValue && props.validate ? 'filled' : ''}` } 
+          className={ `form-input confirm ${className} ${ fieldValue && props.validate && props.validation ? 'filled' : ''}` } 
           onChange={ onConfirm } 
           placeholder={ `Confirm ${props.label}` }
           onKeyUp={ onKeyupHandler }
@@ -199,8 +200,8 @@ function FormField({ fragment = false, ...props }: FormFieldProps): JSX.Element 
       {
         pendingValidation && <LinearProgress/>
       }
-      { 
-        props.validate && validationErrors.map((err, index) => {
+      {
+        (props.validate && props.validation) && validationErrors.map((err, index) => {
           return <div className="error" key={ `${props.label}-err-${index}` }>{ err }</div>
         })
       }

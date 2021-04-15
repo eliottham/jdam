@@ -100,11 +100,11 @@ const useStyles = makeStyles({
 
 /* Login / Account creation dialog */
 interface LoginDialogProps { 
-  open: boolean,
-  errors: string[],
-  showErrors?: boolean,
-  tabIndex?: number,
-  client: JdamClient,
+  open: boolean
+  errors: string[]
+  showErrors?: boolean
+  tabIndex?: number
+  client: JdamClient
   onSubmit: (params: { email: string, password: string, nickname?: string, newAccount: boolean }) => void 
 }
 

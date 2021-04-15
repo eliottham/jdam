@@ -1,7 +1,6 @@
 import Evt from './evt'
 import Session from './session'
 import Settings from './settings'
-import base64Valid from 'base-64-valid'
 import Validation from './validation'
 
 class ClientSettings extends Settings {
@@ -18,11 +17,11 @@ class JdamClient extends Evt {
   hash = ''
   authToken = ''
   accountId = ''
-  webSocket: WebSocket | undefined
+  webSocket?: WebSocket
   sessions: Map<string, Session> = new Map()
   activeSession = ''
   settings = new ClientSettings()
-  validation = new Validation()
+  validation = Validation
 
   constructor(params?: JdamClientParams) {
     super()
@@ -177,7 +176,30 @@ class JdamClient extends Evt {
       })
       const responseJson = await response.json()
       const { sessionId } = responseJson
-      const newSession = new Session({ sessionId })
+      const newSession = new Session({ sessionId, webSocket: this.webSocket })
+      this.sessions.set(sessionId, newSession)
+      this.fire('create-session', { sessionId, newSession })
+    } catch (err) {
+      /* do nothing */
+    }
+  }
+
+  async joinSession({ sessionId }: { sessionId: string }) {
+    try {
+      const response = await fetch('session/join', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ sessionId })
+      })
+      const responseJson = await response.json()
+      const { success, errors = [] } = responseJson
+      if (!success) {
+        this.fire('create-session', { success, errors: [ 'Could not join session' ].concat(errors) })
+        return
+      }
+      const newSession = new Session({ sessionId, webSocket: this.webSocket })
       this.sessions.set(sessionId, newSession)
       this.fire('create-session', { sessionId, newSession })
     } catch (err) {

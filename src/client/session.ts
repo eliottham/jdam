@@ -7,6 +7,7 @@ class SessionSettings extends Settings {
 
 interface SessionParams {
   sessionId: string
+  webSocket?: WebSocket
   nodes?: LoopNode[]
 }
 

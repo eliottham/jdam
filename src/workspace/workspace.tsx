@@ -8,7 +8,6 @@ import {
   Fab
 } from '@material-ui/core'
 import AddIcon from '@material-ui/icons/Add'
-import GroupIcon from '@material-ui/icons/Group'
 
 import SessionDialog from './session_dialog'
 
@@ -73,8 +72,9 @@ function Workspace(props: { client: JdamClient }) {
     setCreatingSession(true)
   }
 
-  const handleOnSubmitSession = ({ join = false, name, length }: { join: boolean, name: string, length: number }) => {
+  const handleOnSubmitSession = ({ join = false, name = '', length, sessionId = '' }: { join: boolean, name?: string, length?: number, sessionId?: string }) => {
     if (!join) { props.client.createSession({ name, sessionLength: length }) }
+    else { props.client.joinSession({ sessionId }) }
   }
 
   const handleOnCloseSessionDialog = () => {

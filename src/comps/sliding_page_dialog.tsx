@@ -34,9 +34,18 @@ const useStyles = makeStyles({
     },
     '& .tab-offset': {
       '--index': '0',
-      padding: '1em',
+      margin: '1em',
       transform: 'translate3d(calc(var(--index) * -100%), 0, 0)',
-      transition: 'transform 400ms var(--ease-out)'
+      transition: 'transform 400ms var(--ease-out)',
+      display: 'flex',
+      '& > .page': {
+        height: '100%',
+        '&:not(:first-child)': {
+          position: 'absolute',
+          left: '100%',
+          width: '100%'
+        }
+      }
     }
   }
 })

@@ -1,35 +1,73 @@
 import JdamClient from '../client/jdam_client'
-import Session from '../client/session'
 import { useEffect, useState } from 'react'
 import AddIcon from '@material-ui/icons/Add'
 import GroupIcon from '@material-ui/icons/Group'
 
-import { BigAction, SlidingPageDialog } from '../comps/comps'
+import { BigAction, SlidingPageDialog, Form } from '../comps/comps'
+import FormField, { FormFieldTemplate } from '../comps/form_field'
 import { SlidingPageDialogProps } from '../comps/sliding_page_dialog'
+import Validation from '../client/validation'
 
-import { makeStyles } from '@material-ui/styles'
+interface CreateSessionFormProps {
+  onSubmit: (params: { name: string, length: number }) => void
+}
 
-const useStyles = makeStyles({
-  gridForm: {
-    display: 'grid',
-    gridTemplateColumns: 'max-content 1fr',
-    gridGap: '0.5em'
+function CreateSessionForm(props: CreateSessionFormProps): JSX.Element {
+
+  const [ formValid, setFormValid ] = useState(false)
+
+  const fieldTemplates: FormFieldTemplate[] = [
+    {
+      name: 'name',
+      label: 'Session Name',
+      validation: Validation.validateSessionName
+    },
+    {
+      name: 'length',
+      label: 'Session Length',
+      hint: 'MINUTES',
+      validation: Validation.validateNumeric
+    }
+  ]
+
+  const onSubmitHandler = (params: { [index: string]: string }) => {
+    const { name, length } = params
+    setFormValid(false)
+    props.onSubmit({ name, length: Number(length) })
   }
-})
 
+  return (
+    <Form
+      fieldTemplates={ fieldTemplates }
+      onSubmit={ onSubmitHandler }
+      formValid={ formValid }
+      setFormValid={ setFormValid }
+    />
+  )
+}
 
 export interface SessionDialogProps extends SlidingPageDialogProps {
   client: JdamClient
-  onConfirm: (params: { join: boolean, name: string, length: number }) => void
+  onConfirm: (params: { join: boolean, name?: string, length?: number, sessionId?: string }) => void
 }
 
 function SessionDialog({
   open,
   onClose,
+  onConfirm,
   tabIndex,
   setTabIndex,
   ...props
 }: SessionDialogProps): JSX.Element {
+
+  const handleOnCreateSession = (params: { name: string, length: number }) => {
+    onConfirm({ join: false, ...params })
+  }
+
+  const handleOnJoinSession = (id: string) => {
+    onConfirm({ join: true, sessionId: id })
+  }
+
   return (
     <SlidingPageDialog
       open={ open }
@@ -46,6 +84,9 @@ function SessionDialog({
           <GroupIcon/>
         </BigAction>
       </>
+      <CreateSessionForm
+        onSubmit={ handleOnCreateSession }
+      />
     </SlidingPageDialog>
   )
 }

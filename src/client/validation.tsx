@@ -1,4 +1,4 @@
-class Validation {
+const Validation = {
 
   validatePassword(pass: string): string[] {
     const errors = []
@@ -9,7 +9,7 @@ class Validation {
     if (pass.length > 32) { errors.push('you have to be able to remember the password') }
     if (/^[A-Za-z0-9]+$/.test(pass)) { errors.push('password must contain special characters') }
     return errors
-  }
+  },
 
   validateEmail(email: string): string[] {
     const errors = []
@@ -18,7 +18,7 @@ class Validation {
     if (!email) { return [ 'email must not be blank' ] }
     if (!/^\w[^@]+@[^.]+\.\w+/.test(email)) { errors.push('email is invalid') }
     return errors
-  }
+  },
 
   validateNickname(nick: string): string[] {
     const errors = []
@@ -26,7 +26,7 @@ class Validation {
       if (nick.length > 25) { errors.push('nickname must be less than 25 characters') }
     }
     return errors
-  }
+  },
 
   async checkAccountAvailable(email: string): Promise<{ success: boolean, errors?: string[] }> {
     try {
@@ -43,11 +43,17 @@ class Validation {
       /* do nothing */
     }
     return { success: false }
-  }
+  },
 
   validateSessionName(name: string): string[] {
     const errors = []
     if (/[^\w -]/g.test(name)) { errors.push( 'Session name can only contain alphanumeric characters, underscores, spaces, and dashes') }
+    return errors
+  },
+
+  validateNumeric(input: string): string[] {
+    const errors = []
+    if (isNaN(Number(input))) { errors.push( 'Input must be a number' ) }
     return errors
   }
 
