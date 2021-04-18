@@ -41,7 +41,7 @@ async function addAccount(accountId) {
 
   await sessions.updateOne(
     { _id: CONTAINER },
-    { '$addToSet': { accounts: new ObjectID(accountId) }}
+    { '$addToSet': { accounts: ObjectID(accountId) }}
   )
 
   connectedAccounts.add(accountId)
@@ -49,11 +49,18 @@ async function addAccount(accountId) {
 
 async function deleteAccount(accountId) {
   const sessions = db.collection('sessions')
+  const accounts = db.collection('accounts')
 
-  await sessions.updateOne(
-    { _id: CONTAINER },
-    { '$pull': { accounts: new ObjectID(accountId) }}
-  )
+  await Promise.all([ 
+    sessions.updateOne(
+      { _id: CONTAINER },
+      { '$pull': { accounts: ObjectID(accountId) }}
+    ),
+    accounts.updateOne(
+      { _id: ObjectID(accountId) },
+      { '$pull': { sessions: CONTAINER }}
+    )
+  ])
 
   connectedAccounts.delete(accountId)
 }
@@ -124,7 +131,20 @@ async function exit() {
     socket.end()
   }
   const sessions = db.collection('sessions')
+  const accounts = db.collection('accounts')
+
   await sessions.deleteOne({ _id: CONTAINER })
+
+  /* 
+   * also have to update all accounts to pull this container
+   * from their sessions list
+   */
+
+  await accounts.update(
+    { sessions: CONTAINER },
+    { '$pull': { sessions: CONTAINER }}
+  )
+
   process.exit(1)
 }
 

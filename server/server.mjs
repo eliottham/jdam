@@ -18,7 +18,7 @@ let db
 let sessionOps
 
 const AUTH_COOK = 'auth-token'
-const EXPIRATION_THRESHOLD = (10 * 60 * 1000) /* 10 minutes in ms */
+const EXPIRATION_THRESHOLD = (15 * 60 * 1000) /* 15 minutes in ms */
 
 
 /* new express app */
@@ -147,26 +147,26 @@ function dateStringIsValid(dateString) {
 async function validateLogin(email, hash) {
   if (!db) { throw new Error('Database not found') }
 
-  /* look through profiles to find one matching the email */
-  const profile = await getAccount({ email }) 
+  /* look through accounts to find one matching the email */
+  const account = await getAccount({ email }) 
 
-  if (!profile) {
+  if (!account) {
     throw new Error('Account not found')
   }
 
-  if (profile.hash !== hash) {
+  if (account.hash !== hash) {
     throw new Error('Credentials are invalid')
   }
 
-  return profile
+  return account
 }
 
 async function createAccount({ email, hash, nickname }) {
   if (!db) { throw new Error('Database not found') }
 
   try {
-    const profiles = db.collection('profiles')
-    const { upsertedId } = await profiles.updateOne(
+    const accounts = db.collection('accounts')
+    const { upsertedId } = await accounts.updateOne(
       { email },
       { '$setOnInsert': { email, hash, nickname, sessions: [] }},
       { upsert: true }
@@ -178,20 +178,29 @@ async function createAccount({ email, hash, nickname }) {
 
 }
 
-async function getAccount({ hash, id, email }) {
+async function getAccount({ hash, id, email, withSessionInfo }) {
   if (!db) { throw new Error('Database not found') }
 
-  const profiles = db.collection('profiles')
-  let profile
+  const accounts = db.collection('accounts')
+  let account
   if (id) {
-    profile = await profiles.findOne({ _id: new ObjectID(id) })
+    account = await accounts.findOne({ _id: new ObjectID(id) })
   } else if (hash) {
-    profile = await profiles.findOne({ hash })
+    account = await accounts.findOne({ hash })
   } else if (email) {
-    profile = await profiles.findOne({ email })
+    account = await accounts.findOne({ email })
+  }
+  
+  if (account.sessions?.length) {
+    const sessions = db.collection('sessions')
+    const sessionResults = await sessions.find(
+      { _id: { '$in': account.sessions }})
+    if (sessionResults.length) {
+      account.sessions = sessionResults
+    }
   }
 
-  return profile
+  return account
 }
 
 /* this should probably be something like a JWT */
@@ -284,15 +293,15 @@ app.get('/auth-sessions', (req, res) => {
 
 app.get('/account', useAuth(async (req, res, auth) => {
   const { id } = auth 
-  const profile = await getAccount({ id })
-  if (!profile) {
+  const account = await getAccount({ id })
+  if (!account) {
     res.status(404).json({ success: false, errors: [ 'Account not found' ]})
     return
   }
 
   /* don't pass the hash down to the client */
-  delete profile.hash
-  res.status(200).json({ success: true, account: profile })  
+  delete account.hash
+  res.status(200).json({ success: true, account: account })  
 }))
 
 /* 
@@ -355,12 +364,12 @@ app.post('/account/available', async (req, res) => {
     res.status(400).json({ success: false, errors: [ 'email must not be blank' ] })
   }
 
-  const profiles = db.collection('profiles')
+  const accounts = db.collection('accounts')
 
   try {
-    const profile = await profiles.findOne({ email })
+    const account = await accounts.findOne({ email })
 
-    if (!profile) {
+    if (!account) {
       res.status(200).json({ success: true })
       return
     } else {
@@ -374,13 +383,13 @@ app.post('/account/available', async (req, res) => {
 
 app.post('/account/sessions', useAuth(async (req, res, auth) => {
   const { id } = auth
-  const profile = await getAccount({ id })
-  if (!profile) {
+  const account = await getAccount({ id })
+  if (!account) {
     res.status(404).json({ success: false, errors: [ 'Account not found' ]})
     return
   }
 
-  const { sessionIds = [] } = profile.sessions
+  const { sessionIds = [] } = account.sessions
 
   const sessions = []
   res.status(200).json({ success: true, sessions })  
@@ -416,10 +425,10 @@ app.post('/auth', async (req, res) => {
   if (!email) errors.push('e-mail was not specified')
   if (!hash) errors.push('e-mail and password are both required')
 
-  let profile = {}
+  let account = {}
   if (!errors.length) {
     try {
-      profile = await validateLogin(email, hash)
+      account = await validateLogin(email, hash)
     } catch (err) {
       errors.push(err.message)
     }
@@ -433,11 +442,11 @@ app.post('/auth', async (req, res) => {
     return
   }
 
-  const token = generateSessionToken(profile._id.toString())
+  const token = generateSessionToken(account._id.toString())
 
   res.cookie(AUTH_COOK, token, { maxAge: EXPIRATION_THRESHOLD, httpOnly: true })
 
-  res.json({ success: true, token, id: profile._id })
+  res.json({ success: true, token, id: account._id })
 })
 
 app.get('/unauth', useAuth((req, res, auth) => {

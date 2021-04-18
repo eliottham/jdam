@@ -11,10 +11,6 @@ interface SessionParams {
   nodes?: LoopNode[]
 }
 
-interface ResponseData {
-  connectedAccounts?: string[]
-}
-
 /* 
  * this class will act as its own client and connect directly
  * to an active container running the session server software
@@ -36,7 +32,7 @@ class Session extends Evt {
     if (!params.sessionId) { throw Error('session id is required') }
   }
 
-  handleResponse(params: ResponseData) {
+  handleResponse(params: { [index: string]: any }) {
     /* TODO: all of the possible responses */
   }
 

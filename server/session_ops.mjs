@@ -106,7 +106,7 @@ class SessionOps {
             '--network=jdam-net',
             `-d ${process.platform !== 'linux' ? '-p 25052:25052' : ''}`,
             `${process.platform !== 'linux' ? '' : '--add-host=host.docker.internal:host-gateway'}`,
-            '--rm',
+            /* '--rm', */
             `-e NAME="${sessionName}"`,
             `-e SESSION_LENGTH=${sessionLength}`,
             'jdam/test' ].join(' '), (error, stdout, stderr) => {
@@ -158,13 +158,11 @@ class SessionOps {
     }
 
     /* add the containerId to the account's session array in mongodb */
-    /*
-  const profiles = db.collection('profiles')
-  await profiles.updateOne(
-    { _id: accountId },
-    { '$addToSet': { sessions: containerId }}
-  )
-  */
+    const accounts = this.db.collection('accounts')
+    await accounts.updateOne(
+      { _id: ObjectID(accountId) },
+      { '$addToSet': { sessions: containerId }}
+    )
 
     /* TODO: create a session record in the db for this session */
 
@@ -176,7 +174,7 @@ class SessionOps {
         start: Date.now(),
         length: sessionLength * 60 * 1000, /* I am 100% going to regret/forget making this ms */
         ip,
-        accounts: [ new ObjectID(accountId) ]
+        accounts: [ ObjectID(accountId) ]
       }
     )
 

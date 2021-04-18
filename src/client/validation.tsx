@@ -1,3 +1,39 @@
+import Evt from '../client/evt'
+
+export interface LatentValidation {
+  validate: (input: string) => Promise<void>
+  pending: boolean
+}
+
+class CheckAccountAvailable extends Evt implements LatentValidation {
+  pending = false
+
+  async validate(email: string) {
+    if (!this.pending) {
+      this.pending = true
+      try {
+        const response = await fetch('account/available', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email })
+        })
+        const responseJson = await response.json()
+        this.pending = false
+        this.fire('validate', responseJson)
+        return 
+      } catch (err) {
+        /* do nothing */
+      }
+      this.pending = false
+      this.fire('validate', { success: false })
+    }
+  }
+}
+
+const checkAccountAvailable = new CheckAccountAvailable()
+
 const Validation = {
 
   validatePassword(pass: string): string[] {
@@ -28,25 +64,21 @@ const Validation = {
     return errors
   },
 
-  async checkAccountAvailable(email: string): Promise<{ success: boolean, errors?: string[] }> {
-    try {
-      const response = await fetch('account/available', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email })
+  checkAccountAvailable(email: string): Promise<string[]> {
+    return new Promise(resolve => {
+      const errors: string[] = []
+      checkAccountAvailable.validate(email)
+      checkAccountAvailable.once('validate', (responseJson: { success: boolean, errors?: string[] }) => {
+        const { success } = responseJson 
+        if (!success) { errors.push('account is already in use') }
+        resolve(errors)
       })
-      const responseJson = await response.json()
-      return responseJson
-    } catch (err) {
-      /* do nothing */
-    }
-    return { success: false }
+    })
   },
 
   validateSessionName(name: string): string[] {
     const errors = []
+    if (name && name.length < 8) { errors.push('Session name must be 8 characters or longer') }
     if (/[^\w -]/g.test(name)) { errors.push( 'Session name can only contain alphanumeric characters, underscores, spaces, and dashes') }
     return errors
   },

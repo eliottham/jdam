@@ -2,7 +2,6 @@ import JdamClient from './client/jdam_client'
 import { useEffect, useState, useRef, RefObject } from 'react'
 import { 
   Dialog,
-  DialogContent,
   Tabs,
   Tab,
   Button,
@@ -10,12 +9,13 @@ import {
   ThemeProvider
 } from '@material-ui/core'
 import { CSSTransition } from 'react-transition-group'
-import { FormField, Icon } from './comps/comps'
+import { Form, Icon } from './comps/comps'
 import { FormFieldTemplate } from './comps/form_field'
 import Workspace from './workspace/workspace'
 
 import { createMuiTheme } from '@material-ui/core/styles'
 import { makeStyles } from '@material-ui/styles'
+import Validation from './client/validation'
 
 const theme = createMuiTheme({
   palette: {
@@ -47,27 +47,20 @@ const useStyles = makeStyles({
       display: 'flex',
       flexDirection: 'column',
       height: '100%'
-    },
-    '& .grid-wrapper': {
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingTop: 24,
-      '& .grid': {
-        display: 'grid',
-        gridTemplateColumns: 'max-content 1fr',
-        gridGap: '0.5em'
-      }
     }
+  },
+  formWrapper: {
+    padding: '1em',
+    flex: 1
+  },
+  authError: {
+    fontSize: '1.1rem',
+    color: 'var(--red)'
   },
   launchButton: {
     '&.MuiButton-root': {
       margin: '12px 24px 24px'
     }
-  },
-  authError: {
-    fontSize: '1.1rem',
-    color: 'var(--red)'
   },
   errors: {
     '&.MuiCard-root': {
@@ -108,6 +101,31 @@ interface LoginDialogProps {
   onSubmit: (params: { email: string, password: string, nickname?: string, newAccount: boolean }) => void 
 }
 
+const createAccountFieldTemplates: Array<FormFieldTemplate> = [ 
+  {
+    name: 'email',
+    label: 'email',
+    validation: Validation.validateEmail,
+    latentValidation: Validation.checkAccountAvailable
+  }, {
+    name: 'password',
+    label: 'password',
+    type: 'password',
+    confirm: true,
+    validation: Validation.validatePassword
+  }, {
+    name: 'nickname',
+    label: 'nickname',
+    validation: Validation.validateNickname
+  } ]
+  
+const loginFieldTemplates = createAccountFieldTemplates.slice(0, 2).map(temp => {
+  const newTemp = { ...temp }
+  delete newTemp.confirm
+  delete newTemp.validation
+  return newTemp
+}) 
+
 function LoginDialog( props: LoginDialogProps): JSX.Element {
 
   const classes = useStyles()
@@ -124,13 +142,11 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
    * this is also useful for confirmation fields which don't update the
    * value directly, but only update the validity based on matching
    */
-  const [ formFieldsValid, setFormFieldsValid ] = useState<{ [index: string]: boolean }>({ email: false, password: false, nickname: true })
   const [ formValid, setFormValid ] = useState(true)
 
   /* clear all fields except email, which is save to keep around */
   const resetFields = () => {
     setFormFields({ ...formFields, password: '', nickname: '' })
-    setFormFieldsValid({ ...formFieldsValid, email: false, password: false, nickname: true})
   }
 
   useEffect(() => {
@@ -157,36 +173,12 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
 
   const errorsRef = useRef<HTMLDivElement>(null)
 
-  const fieldTemplates: Array<FormFieldTemplate> = [ 
-    {
-      name: 'email',
-      label: 'email',
-      validation: props.client.validation.validateEmail,
-      latentValidation: async (email: string): Promise<string[]> => {
-        const errors = []
-        const { success } = await props.client.checkAccountAvailable(email)
-        if (!success) { errors.push('account is already in use') }
-        return errors
-      }
-    }, {
-      name: 'password',
-      label: 'password',
-      type: 'password',
-      confirm: true,
-      validation: props.client.validation.validatePassword
-    }, {
-      name: 'nickname',
-      label: 'nickname',
-      validation: props.client.validation.validateNickname
-    } ]
-    
-
   const tabChange = (index: number) => {
+    /* reset fields when switching back to the LOGIN tab */
+    resetFields()
+
     setTabIndex(index)
     setFormValid(index === 0)
-
-    /* reset fields when switching back to the LOGIN tab */
-    index === 0 && resetFields()
   }
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -195,75 +187,11 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
 
   const handleSubmit = () => {
     props.onSubmit({
-      email: formFields.email,
-      password: formFields.password,
-      nickname: formFields.nickname,
+      email: formFields['email'],
+      password: formFields['password'],
+      nickname: formFields['nickname'],
       newAccount: tabIndex === 1
     })
-  }
-
-  /* create a form field and setup all it's handlers */
-  const _field = (template: FormFieldTemplate, validation: boolean, last: boolean): JSX.Element => {
-    const handleFieldChange = (input: string) => {
-      const newFields = { ...formFields }
-      newFields[template.name] = input
-      setFormFields(newFields)
-    }
-
-    const handleEnter = () => {
-      last && handleSubmit()
-    }
-
-    const handleFieldValidate = (valid: boolean) => {
-      const newValidFields = { ...formFieldsValid }
-      if (validation) {
-        newValidFields[template.name] = valid
-        setFormFieldsValid(newValidFields)
-      }
-      let formValid = true
-      if (tabIndex === 1) {
-        for (const fieldName in newValidFields) {
-          formValid = formValid && newValidFields[fieldName]
-        }
-      }
-      setFormValid(formValid)
-    }
-
-    return <FormField 
-      validate={ validation } 
-      key={ `field-${validation ? 'v-' : ''}${template.name}` } 
-      value={ formFields[template.name] }
-      fragment={ true } 
-      onChange={ handleFieldChange } 
-      onEnter={ handleEnter }
-      onValidate={ handleFieldValidate }
-      { ...template } 
-      confirm={ template.confirm && validation }
-    />
-  }
-
-  const loginFields = () => {
-    return (
-      <>
-        {
-          fieldTemplates.slice(0, 2).map((template, index, arr) => {
-            return _field(template, false, index === arr.length - 1)
-          })
-        }
-      </>
-    )
-  }
-
-  const accountCreateFields = () => {
-    return (
-      <>
-        {
-          fieldTemplates.map((template, index, arr) => {
-            return _field(template, true, index === arr.length - 1)
-          })
-        }
-      </>
-    )
   }
 
   /* CSSTransition updates */
@@ -295,11 +223,17 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
           <Tab label="Login" />
           <Tab label="Sign-up" />
         </Tabs>
-        <DialogContent className="grid-wrapper">
-          <div className="grid">
-            { tabIndex === 0 ? loginFields() : accountCreateFields() } 
-          </div>
-        </DialogContent>
+        <div className={ classes.formWrapper }>
+          <Form
+            fieldTemplates={ tabIndex === 0 ? loginFieldTemplates : createAccountFieldTemplates }
+            noSubmit={ true }
+            formValid={ formValid }
+            setFormValid={ setFormValid }
+            formFields={ formFields }
+            setFormFields={ setFormFields }
+            onSubmit={ handleSubmit }
+          />
+        </div>
         <CSSTransition
           in={ !!props.showErrors }
           nodeRef={ errorsRef }
@@ -325,7 +259,9 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
           onClick={ handleSubmit } 
           variant="contained" 
           disabled={ !formValid }
-          className={ classes.launchButton }>{ tabIndex === 0 ? 'Launch' : 'Create' }
+          className={ classes.launchButton }
+        >
+          { tabIndex === 0 ? 'Launch' : 'Create' }
         </Button>
       </div>
     </Dialog>

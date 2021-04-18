@@ -26,11 +26,6 @@ const useStyles = makeStyles({
       }
     }
   },
-  launchButton: {
-    '&.MuiButton-root': {
-      margin: '12px 24px 24px'
-    }
-  },
   authError: {
     fontSize: '1.1rem',
     color: 'var(--red)'
@@ -66,16 +61,19 @@ const useStyles = makeStyles({
 
 interface FormProps { 
   fieldTemplates: FormFieldTemplate[]
-  onSubmit: (params: { [index: string]: string }) => void 
+  onSubmit?: (params: { [index: string]: string }) => void 
   errors?: string[]
   showErrors?: boolean
   submitText?: string
+  noSubmit?: boolean
   children?: React.ReactChild[]
   formValid?: boolean
   setFormValid?: (valid: boolean) => void
+  formFields?: { [index: string]: string }
+  setFormFields?: (fields: { [index: string]: string }) => void
 }
 
-function Form( props: FormProps ): JSX.Element {
+function Form( { noSubmit = false, ...props }: FormProps ): JSX.Element {
 
   const classes = useStyles()
 
@@ -100,8 +98,8 @@ function Form( props: FormProps ): JSX.Element {
   const errorsRef = useRef<HTMLDivElement>(null)
 
   const handleSubmit = () => {
-    props.onSubmit({
-      ...formFields
+    props.onSubmit?.({
+      ...props.formFields ?? formFields
     })
   }
 
@@ -121,9 +119,9 @@ function Form( props: FormProps ): JSX.Element {
   /* create a form field and setup all it's handlers */
   const _field = (template: FormFieldTemplate, last: boolean): JSX.Element => {
     const handleFieldChange = (input: string) => {
-      const newFields = { ...formFields }
+      const newFields = { ...props.formFields ?? formFields }
       newFields[template.name] = input
-      setFormFields(newFields)
+      ;(props.setFormFields ?? setFormFields)(newFields)
     }
 
     const handleEnter = () => {
@@ -153,7 +151,6 @@ function Form( props: FormProps ): JSX.Element {
       const result = _childGen.next()
       if (!result.done) { 
         return React.cloneElement(result.value as JSX.Element, {
-          key: `field-${template.name}`,
           onValidate: handleFieldValidate,
           onEnter: handleEnter
         }) 
@@ -163,9 +160,9 @@ function Form( props: FormProps ): JSX.Element {
     return <FormField 
       validate={ true }
       key={ `field-${template.name}` } 
-      value={ formFields[template.name] }
+      fieldValue={ (props.formFields ?? formFields)[template.name] }
+      setFieldValue={ handleFieldChange }
       fragment={ true } 
-      onChange={ handleFieldChange } 
       onEnter={ handleEnter }
       onValidate={ handleFieldValidate }
       { ...template } 
@@ -227,12 +224,15 @@ function Form( props: FormProps ): JSX.Element {
           </div>
         </Card>
       </CSSTransition>
-      <Button 
-        onClick={ handleSubmit } 
-        variant="contained" 
-        disabled={ !(props.formValid ?? formValid) }
-        className={ classes.launchButton }>{ props.submitText || 'Submit' }
-      </Button>
+      { !noSubmit &&
+        <Button 
+          onClick={ handleSubmit } 
+          variant="contained" 
+          disabled={ !(props.formValid ?? formValid) }
+        >
+          { props.submitText || 'Submit' }
+        </Button>
+      }
     </div>
   )
 

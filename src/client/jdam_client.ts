@@ -1,7 +1,6 @@
 import Evt from './evt'
 import Session from './session'
 import Settings from './settings'
-import Validation from './validation'
 
 class ClientSettings extends Settings {
 }
@@ -21,7 +20,6 @@ class JdamClient extends Evt {
   sessions: Map<string, Session> = new Map()
   activeSession = ''
   settings = new ClientSettings()
-  validation = Validation
 
   constructor(params?: JdamClientParams) {
     super()
@@ -66,7 +64,7 @@ class JdamClient extends Evt {
           switch (prefix) {
           case 'ses':
             try {
-              const rjson  = JSON.parse(data)
+              const rjson = JSON.parse(data)
               const { expired, loggedOff } = rjson
               if (expired === true || loggedOff === true) {
                 this.fire('logoff', rjson)
@@ -74,16 +72,28 @@ class JdamClient extends Evt {
             } catch (err) {
               /* do nothing */
             }
+            break
+          case 'jam':
+            try {
+              const rjson = JSON.parse(data)
+              const { sessionId, endSession } = rjson
+              const session = this.sessions.get(sessionId)
+              if (session) {
+                if (!endSession) {
+                  session.handleResponse(rjson)
+                  return
+                }
+                this.sessions.delete(sessionId)
+                this.fire('delete-session', { sessionId, session })
+              }
+            } catch (err) {
+              /* do nothing */
+            }
+            break
           }
         }
       })
     })
-  }
-
-  async checkAccountAvailable(email: string): Promise<{ success: boolean, errors?: string[] }> {
-    const responseJson = await this.validation.checkAccountAvailable(email)
-    this.fire('check-account-available', responseJson)
-    return responseJson
   }
 
   async createAccount(params: { email: string, password: string, nickname?: string} ) {

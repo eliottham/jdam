@@ -86,9 +86,9 @@ function SlidingPageDialog({
         </div>
         { /* this is a hack over here */ }
         <div className="tab-offset" style={{ '--index': tabIndex > 0 ? '1' : '0' } as React.CSSProperties }>
-          { React.Children.map(children, child => {
+          { React.Children.map(children, (child, index) => {
             return (
-              <div className="page flex-center">
+              <div className="page flex-center" style={{ display: index !== tabIndex && index > 0 ? 'none' : '' }}>
                 { child }
               </div>
             ) })
