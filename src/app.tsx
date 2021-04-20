@@ -1,15 +1,13 @@
 import JdamClient from './client/jdam_client'
-import { useEffect, useState, useRef, RefObject } from 'react'
+import { useEffect, useState } from 'react'
 import { 
   Dialog,
   Tabs,
   Tab,
   Button,
-  Card,
   ThemeProvider
 } from '@material-ui/core'
-import { CSSTransition } from 'react-transition-group'
-import { Form, Icon } from './comps/comps'
+import { Form, Icon, PopupErrors } from './comps/comps'
 import { FormFieldTemplate } from './comps/form_field'
 import Workspace from './workspace/workspace'
 
@@ -51,42 +49,12 @@ const useStyles = makeStyles({
   },
   formWrapper: {
     padding: '1em',
-    flex: 1
-  },
-  authError: {
-    fontSize: '1.1rem',
-    color: 'var(--red)'
+    flex: 1,
+    width: 540
   },
   launchButton: {
     '&.MuiButton-root': {
-      margin: '12px 24px 24px'
-    }
-  },
-  errors: {
-    '&.MuiCard-root': {
-      padding: '1em',
-      color: 'white',
-      backgroundColor: 'var(--red)',
-      borderRadius: 4,
-      margin: '12px 24px',
-      transition: 'all 500ms var(--ease-out)',
-      overflow: 'hidden',
-      boxSizing: 'content-box',
-      '& $authError': {
-        color: 'white'
-      }
-    },
-    '&.enter': {
-      margin: '0 24px',
-      padding: '0 1em'
-    },
-    '&.enter-active, &.exit': {
-      margin: '12px 24px',
-      padding: '1em'
-    },
-    '&.exit-active': {
-      margin: '0 24px',
-      padding: '0 1em'
+      margin: '1em'
     }
   }
 })
@@ -169,9 +137,7 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
       props.client.un('logon', onLogon)
       props.client.un('create-account', onCreateAccount)
     }
-  }, [ props.client ])
-
-  const errorsRef = useRef<HTMLDivElement>(null)
+  })
 
   const tabChange = (index: number) => {
     /* reset fields when switching back to the LOGIN tab */
@@ -192,20 +158,6 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
       nickname: formFields['nickname'],
       newAccount: tabIndex === 1
     })
-  }
-
-  /* CSSTransition updates */
-  const heightZero = (ref: RefObject<HTMLDivElement>) => {
-    if (!ref.current) return
-    ref.current.style.height = '0'
-  }
-  const heightToContent = (ref: RefObject<HTMLDivElement>) => {
-    if (!ref.current) return
-    ref.current.style.height = `${(ref.current.children[0] as HTMLDivElement).offsetHeight}px`
-  }
-  const heightUnset = (ref: RefObject<HTMLDivElement>) => {
-    if (!ref.current) return
-    ref.current.style.height = ''
   }
 
   return (
@@ -234,27 +186,12 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
             onSubmit={ handleSubmit }
           />
         </div>
-        <CSSTransition
-          in={ !!props.showErrors }
-          nodeRef={ errorsRef }
-          timeout={ 500 }
-          unmountOnExit={ true }
-          onEnter={()=>heightZero(errorsRef)}
-          onEntering={()=>heightToContent(errorsRef)}
-          onEntered={()=>heightUnset(errorsRef)}
-          onExit={()=>heightToContent(errorsRef)}
-          onExiting={()=>heightZero(errorsRef)}
-        >
-          <Card className={ classes.errors } ref={ errorsRef }>
-            <div>
-              { 
-                props.errors.map((err, index) => {
-                  return <div key={ `auth-err-${index}` } className={ classes.authError }>{ err }</div>
-                })
-              }
-            </div>
-          </Card>
-        </CSSTransition>
+        <div style={{ margin: '0 1em' }}>
+          <PopupErrors
+            errors={ props.errors }
+            showErrors={ props.showErrors }
+          />
+        </div>
         <Button 
           onClick={ handleSubmit } 
           variant="contained" 
@@ -311,6 +248,7 @@ function App(props: {client: JdamClient}): JSX.Element {
       props.client.un('logon', onLogon)
       props.client.un('logoff', onLogoff)
       props.client.un('create-account', onErrors)
+      window.clearTimeout(timeoutIndex)
     }
   }, [ props.client, timeoutIndex ])
 
@@ -325,7 +263,13 @@ function App(props: {client: JdamClient}): JSX.Element {
   return (
     <div>
       <ThemeProvider theme={ theme }>
-        <LoginDialog open={ !loggedIn } onSubmit={ handleOnSubmit } errors={ authErrors } showErrors={ showErrors } client={ props.client }/>
+        <LoginDialog 
+          open={ !loggedIn } 
+          onSubmit={ handleOnSubmit } 
+          errors={ authErrors } 
+          showErrors={ showErrors } 
+          client={ props.client }
+        />
         { loggedIn && <Workspace client={ props.client }/> }
       </ThemeProvider>
     </div>

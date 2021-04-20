@@ -11,6 +11,8 @@ interface JdamClientParams {
 }
 
 class JdamClient extends Evt {
+  _mId = 0
+  _pendingMessages: Map<number, (params: { prefix: string, mId: string, data: string }) => void> = new Map()
   username = ''
   nickname = ''
   hash = ''
@@ -32,10 +34,14 @@ class JdamClient extends Evt {
     return this.webSocket.readyState === WebSocket.OPEN
   }
 
-  wsSend(prefix: string, message: string): void {
-    if (this.isWsConnected()) {
-      this.webSocket?.send(`${prefix}:${message}`)
-    }
+  wsSend(prefix: string, message: string): Promise<{ prefix: string, mId: string, data: string }> {
+    return new Promise(resolve => {
+      if (this.isWsConnected()) {
+        this._mId++
+        this.webSocket?.send(`${prefix}:${this._mId}:${message}`)
+        this._pendingMessages.set(this._mId, resolve)
+      }
+    })
   }
 
   connect(retryOnly = false) {
@@ -59,8 +65,8 @@ class JdamClient extends Evt {
             resolve()
           }
         } else if (typeof evt.data === 'string') {
-          const prefix = evt.data.split(':')[0]
-          const data = evt.data.slice(prefix.length + 1)
+          const [ prefix, mId ] = evt.data.split(':').slice(0, 2)
+          const data = evt.data.slice(prefix.length + mId.length + 2)
           switch (prefix) {
           case 'ses':
             try {
@@ -76,7 +82,7 @@ class JdamClient extends Evt {
           case 'jam':
             try {
               const rjson = JSON.parse(data)
-              const { sessionId, endSession } = rjson
+              const { sessionId, endSession, purgeSessions } = rjson
               const session = this.sessions.get(sessionId)
               if (session) {
                 if (!endSession) {
@@ -85,11 +91,25 @@ class JdamClient extends Evt {
                 }
                 this.sessions.delete(sessionId)
                 this.fire('delete-session', { sessionId, session })
+                this.fire('set-sessions', { sessions: this.getSessions() })
+              } else if (purgeSessions) {
+                this.sessions.clear()
+                this.fire('purge-sessions', {})
+                this.fire('set-sessions', { sessions: this.getSessions() })
               }
             } catch (err) {
               /* do nothing */
             }
             break
+          }
+          const pendingMessage = this._pendingMessages.get(Number(mId))
+          if (pendingMessage) {
+            this._pendingMessages.delete(Number(mId))
+            pendingMessage({
+              prefix,
+              mId,
+              data
+            })
           }
         }
       })
@@ -129,7 +149,22 @@ class JdamClient extends Evt {
         this.username = account.email
         this.hash = account.hash
         this.nickname = account.nickname
+        if (account.sessions.length) {
+          for (const session of account.sessions) {
+            const { _id: sessionId, title, description, accounts } = session
+            this.sessions.set(sessionId, new Session({ 
+              title,
+              description,
+              sessionId,
+              accounts,
+              webSocket: this.webSocket,
+              client: this
+            }))
+          }
+          this.fire('set-sessions', { sessions: this.getSessions() })
+        }
         this.fire('account-info', { username: this.username, nickname: this.nickname })
+
       }
     } catch (err) {
       /* do nothing */
@@ -175,20 +210,41 @@ class JdamClient extends Evt {
     this.fire('logoff', responseJson)
   }
 
-  async createSession({ name, sessionLength = 1 }: { name: string, sessionLength?: number }) {
+  async createSession({
+    title,
+    description,
+    sessionLength = 1 
+  }: { 
+    title: string,
+    description?: string,
+    sessionLength?: number 
+  }) {
     try {
       const response = await fetch('session/create', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ name, sessionLength })
+        body: JSON.stringify({ title, description, sessionLength })
       })
       const responseJson = await response.json()
-      const { sessionId } = responseJson
-      const newSession = new Session({ sessionId, webSocket: this.webSocket })
+      const { sessionId, success, errors = [] } = responseJson
+      if (!success) {
+        this.fire('create-session', { success, errors })
+        return
+      }
+      const newSession = new Session({ 
+        title,
+        description,
+        sessionLength,
+        sessionId,
+        webSocket: this.webSocket,
+        client: this
+      })
       this.sessions.set(sessionId, newSession)
       this.fire('create-session', { sessionId, newSession })
+      this.fire('set-sessions', { sessions: this.getSessions() })
+      this.setActiveSession(sessionId)
     } catch (err) {
       /* do nothing */
     }
@@ -204,14 +260,21 @@ class JdamClient extends Evt {
         body: JSON.stringify({ sessionId })
       })
       const responseJson = await response.json()
-      const { success, errors = [] } = responseJson
+      const { success, errors = [], title, description } = responseJson
       if (!success) {
         this.fire('create-session', { success, errors: [ 'Could not join session' ].concat(errors) })
         return
       }
-      const newSession = new Session({ sessionId, webSocket: this.webSocket })
+      const newSession = new Session({ 
+        title,
+        description,
+        sessionId,
+        webSocket: this.webSocket,
+        client: this
+      })
       this.sessions.set(sessionId, newSession)
       this.fire('create-session', { sessionId, newSession })
+      this.fire('set-sessions', { sessions: this.getSessions() })
     } catch (err) {
       /* do nothing */
     }

@@ -1,14 +1,25 @@
 import Evt from './evt'
 import LoopNode from './loop_node'
 import Settings from './settings'
+import JdamClient from './jdam_client'
+
+export interface SessionSettingsParams {
+  setting1: string
+}
 
 class SessionSettings extends Settings {
 }
 
 interface SessionParams {
   sessionId: string
+  title: string
+  sessionLength?: number
+  description?: string
   webSocket?: WebSocket
   nodes?: LoopNode[]
+  accounts?: string[]
+  settings?: SessionSettingsParams
+  client: JdamClient
 }
 
 /* 
@@ -18,22 +29,73 @@ interface SessionParams {
 class Session extends Evt {
   nodes: LoopNode[] = []
   sessionId = ''
-  authToken = ''
   title = ''
   description = ''
   color = '' /* hex value */
-  userCount = 0
+  accounts: Set<string> = new Set()
+  start = 0
+  sessionLength = 0
   settings = new SessionSettings()
+  webSocket?: WebSocket
+  client: JdamClient
 
   constructor(params: SessionParams) {
     super()
-    Object.assign(this, {}, params)
+    const { 
+      sessionId,
+      title,
+      description,
+      sessionLength,
+      accounts = [],
+      settings = {},
+      webSocket,
+      client
+    } = params
+    Object.assign(this, {
+      sessionId,
+      title,
+      description,
+      sessionLength
+    })
+
+    this.webSocket = webSocket
+    this.client = client
+
+    this.setAccounts(accounts)
 
     if (!params.sessionId) { throw Error('session id is required') }
   }
 
+  setActive() {
+    this.client.setActiveSession(this.sessionId)
+  }
+
+  setAccounts(accounts: string[] = []) {
+    if (!accounts.length) {
+      this.accounts.clear() 
+      return
+    } 
+
+    for (const account of accounts) {
+      this.accounts.add(account)
+    }
+  }
+
+  getAccounts() {
+    return Array.from(this.accounts)
+  }
+
   handleResponse(params: { [index: string]: any }) {
     /* TODO: all of the possible responses */
+    if (params.info) {
+      const { title, description, accounts = [] } = params.info  
+      Object.assign(this, { title, description })
+      this.setAccounts(accounts)
+      this.fire('set-accounts', { accounts: this.getAccounts() })
+    } else if (params.addAccount) {
+      this.accounts.add(params.addAccount)
+      this.fire('set-accounts', { accounts: this.getAccounts() })
+    }
   }
 
 }
