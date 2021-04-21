@@ -67,7 +67,13 @@ const Validation = {
   checkAccountAvailable(email: string): Promise<string[]> {
     return new Promise(resolve => {
       const errors: string[] = []
-      checkAccountAvailable.validate(email)
+      checkAccountAvailable.validate(email) /* this will noop with pending is true */
+
+      /* 
+       * alway add a once-off listener, which allows for any late-entering
+       * listeners to update, without having to re-submit validation all over
+       * again
+       */
       checkAccountAvailable.once('validate', (responseJson: { success: boolean, errors?: string[] }) => {
         const { success } = responseJson 
         if (!success) { errors.push('account is already in use') }
@@ -79,7 +85,13 @@ const Validation = {
   validateSessionName(name: string): string[] {
     const errors = []
     if (name && name.length < 8) { errors.push('Session name must be 8 characters or longer') }
-    if (/[^\w -]/g.test(name)) { errors.push( 'Session name can only contain alphanumeric characters, underscores, spaces, and dashes') }
+    if (Validation.validateSafeText(name).length) { errors.push( 'Session name can only contain alphanumeric characters, underscores, spaces, and dashes') }
+    return errors
+  },
+
+  validateSafeText(text: string): string[] {
+    const errors = []
+    if (/[^\w -]/g.test(text)) { errors.push( 'Text can only contain alphanumeric characters, underscores, spaces, and dashes') }
     return errors
   },
 

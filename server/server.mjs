@@ -55,8 +55,8 @@ app.ws('/ws', ws => {
   ws.send('connected')
   ws.on('message', msg => {
     if (typeof msg === 'string') {
-      const prefix = msg.split(':')[0]
-      const data = msg.slice(prefix.length + 1)
+      const [ prefix, mId ] = msg.split(':').slice(0, 2)
+      const data = msg.slice(prefix.length + mId.length + 2)
       switch (prefix) {
       case 'tok':
       {
@@ -72,7 +72,7 @@ app.ws('/ws', ws => {
           const { token, sessionId } = json
           checkAuth({ token })
 
-          sessionOps.write(sessionId, data)
+          sessionOps.write(sessionId, mId, data)
 
         } catch (err) {
           /* 
@@ -113,7 +113,7 @@ async function managementLoop() {
   if ((now + 5000) % (60 * 2 * 1000) < 10000) {
     for (const [ key, value ] of authSessionMap.entries()) {
       if (now > value.expires) {
-        if (value.client) { messageClient(value.client, `ses:${JSON.stringify({ expired: true })}`) }
+        if (value.client) { messageClient(value.client, `ses:-1:${JSON.stringify({ expired: true })}`) }
         if (value.id) { accountAuthMap.delete(value.id) }
         authSessionMap.delete(key)
       }
@@ -178,7 +178,7 @@ async function createAccount({ email, hash, nickname }) {
 
 }
 
-async function getAccount({ hash, id, email, withSessionInfo }) {
+async function getAccount({ hash, id, email }) {
   if (!db) { throw new Error('Database not found') }
 
   const accounts = db.collection('accounts')
@@ -193,9 +193,10 @@ async function getAccount({ hash, id, email, withSessionInfo }) {
   
   if (account.sessions?.length) {
     const sessions = db.collection('sessions')
-    const sessionResults = await sessions.find(
+    const cursor = await sessions.find(
       { _id: { '$in': account.sessions }})
-    if (sessionResults.length) {
+    if (cursor) {
+      const sessionResults = await cursor.toArray()
       account.sessions = sessionResults
     }
   }
@@ -293,7 +294,7 @@ app.get('/auth-sessions', (req, res) => {
 
 app.get('/account', useAuth(async (req, res, auth) => {
   const { id } = auth 
-  const account = await getAccount({ id })
+  const account = await getAccount({ id, withSessionInfo: true })
   if (!account) {
     res.status(404).json({ success: false, errors: [ 'Account not found' ]})
     return
@@ -454,7 +455,7 @@ app.get('/unauth', useAuth((req, res, auth) => {
   if (token) {
     const authSessionObj = authSessionMap.get(token) 
     const sendString = JSON.stringify({ expired: true, loggedOff: true })
-    authSessionObj?.client?.send(`ses:${sendString}`)
+    authSessionObj?.client?.send(`ses:-1:${sendString}`)
     authSessionMap.delete(token)
     if (authSessionObj.id) { accountAuthMap.delete(authSessionObj.id) }
     res.status(200).json({ success: true })
@@ -464,7 +465,7 @@ app.get('/unauth', useAuth((req, res, auth) => {
   res.status(410).json({ success: false, errors: [ 'Invalid token' ] })
 }))
 
-function handleSocketResponse(res, containerId) {
+function handleSocketResponse(mId, res, containerId) {
   const { connectedAccounts = [] } = res
   res.sessionId = containerId
 
@@ -472,7 +473,7 @@ function handleSocketResponse(res, containerId) {
     const token = accountAuthMap.get(connectedAccount)
     const authSessionObj = authSessionMap.get(token)
     if (authSessionObj.client) {
-      authSessionObj.client.send('jam:' + JSON.stringify(res)) 
+      authSessionObj.client.send(`jam:${mId}:${JSON.stringify(res)}`) 
     }
   }
 }
@@ -480,15 +481,15 @@ function handleSocketResponse(res, containerId) {
 app.put('/session/create', useAuth(async (req, res, auth) => {
   const { id, token } = auth 
 
-  const { name } = req.body
+  const { title, description = '', sessionLength } = req.body
 
-  if (!name) { 
-    res.status(400).json({ success: false, errors: [ 'A name must be specified for the session' ] })
+  if (!title) { 
+    res.status(400).json({ success: false, errors: [ 'A title must be specified for the session' ] })
     return 
   }
 
   try {
-    const sessionInfo = await sessionOps.createSession({ sessionName: name, accountId: id, token })
+    const sessionInfo = await sessionOps.createSession({ title, description, accountId: id, token, sessionLength })
     res.status(200).json({ success: true, ...sessionInfo })
   } catch (err) {
     res.status(400).json({ success: false, errors: [ err.message ] })
@@ -524,6 +525,18 @@ app.put('/session/join', useAuth(async (req, res, auth) => {
   }
 }))
 
+app.get('/sessions/purge-all', async (req, res) => {
+  try {
+    await sessionOps.purgeSessions()
+    for (const value of authSessionMap.values()) {
+      if (value.client) { messageClient(value.client, `jam:-1:${JSON.stringify({ purgeSessions: true })}`) }
+    }
+    res.status(200).json({ success: true })
+  } catch (err) {
+    res.status(400).json({ success: false, errors: [ err.message ] })
+  }
+})
+
 app.get('/sessions', (req, res) => {
   let output = ''
   for (const [ key, value ] of sessionOps.getSessions()) {
@@ -532,10 +545,8 @@ app.get('/sessions', (req, res) => {
   res.status(200).write(output, () => { res.end() })
 })
 
-async function begin() {
 
-  /* eliminate any running docker containers for jdam/test */
-  exec('bash -c "docker rm -f $(docker ps -aq -f ancestor=jdam/test)"')
+async function begin() {
 
   try {
     await mongoClient.connect()
@@ -547,6 +558,9 @@ async function begin() {
     /* do nothing */
     console.dir(err)
   }
+
+  /* eliminate any running docker containers for jdam/session */
+  await sessionOps.purgeSessions()
 
   app.listen(PORT, () => { 
     console.log(`server running on port: ${PORT}`) /* do nothing */ 

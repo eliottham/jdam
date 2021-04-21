@@ -47,22 +47,30 @@ function Workspace(props: { client: JdamClient }) {
   const classes = useStyles()
 
   const [ activeSession, setActiveSession ] = useState<Session>()
+  const [ sessions, setSessions ] = useState<Session[]>([])
   const [ creatingSession, setCreatingSession ] = useState(false)
   const [ tabIndex, setTabIndex ] = useState(0)
 
   useEffect(() => {
     const onSetActiveSession = ({ session }: { session: Session }) => {
       setActiveSession(session)
+      setCreatingSession(false)
+    }
+
+    const onSetSessions = ({ sessions }: { sessions: Session[] }) => {
+      setSessions(sessions)
     }
 
     const onCancelCreateSession = () => {
       setCreatingSession(false)
     }
 
+    props.client.on('set-sessions', onSetSessions)
     props.client.on('active-session', onSetActiveSession)
     props.client.on('cancel-create-session', onCancelCreateSession)
 
     return () => {
+      props.client.un('set-sessions', onSetSessions)
       props.client.un('active-session', onSetActiveSession)
       props.client.un('cancel-create-session', onCancelCreateSession)
     }
@@ -72,8 +80,20 @@ function Workspace(props: { client: JdamClient }) {
     setCreatingSession(true)
   }
 
-  const handleOnSubmitSession = ({ join = false, name = '', length, sessionId = '' }: { join: boolean, name?: string, length?: number, sessionId?: string }) => {
-    if (!join) { props.client.createSession({ name, sessionLength: length }) }
+  const handleOnSubmitSession = ({ 
+    join = false,
+    title = '',
+    description = '',
+    length,
+    sessionId = '' 
+  }: { 
+    join: boolean,
+    title?: string,
+    description?: string,
+    length?: number,
+    sessionId?: string
+  }) => {
+    if (!join) { props.client.createSession({ title, description, sessionLength: length }) }
     else { props.client.joinSession({ sessionId }) }
   }
 
@@ -92,8 +112,12 @@ function Workspace(props: { client: JdamClient }) {
           <ProfileListItem client={ props.client }/> 
           <Divider/>
           {
-            props.client.getSessions().map((session, index) => {
-              return <SessionListItem key={ `session-${index}` } session={ session }/>
+            sessions.map(session => {
+              return <SessionListItem 
+                active={ session === activeSession } 
+                key={ `session-${session.sessionId}` } 
+                session={ session }
+              />
             })
           }
         </List>

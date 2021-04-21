@@ -21,6 +21,9 @@ const pendingSessions = new Map()
  * started. Otherwise the client socket connects before the other side
  * opens, and then instantly terminates.
  */
+
+const separator = ':'.charCodeAt()
+
 const sessionListener = net.createServer(socket => {
   socket.once('data', data => {
     try {
@@ -33,12 +36,21 @@ const sessionListener = net.createServer(socket => {
       pendingSessions.delete(sessionId)
 
       const client = net.createConnection({ host: ip, port: 25052 }, () => { 
-        client.write(JSON.stringify({ req : { addAccount: accountId }}), () =>{
+        client.write('-1:' + JSON.stringify({ req : { addAccount: accountId }}), () =>{
           client.on('data', data => {
+            let splitIndex = -1
+            for (let a = 0; a < data.length; a++) {
+              const code = data[a]
+              if (code === separator) {
+                splitIndex = a
+                break
+              }
+            }
+            const mId = data.slice(0, splitIndex) 
             try {
-              const json = JSON.parse(data)
+              const json = JSON.parse(data.slice(splitIndex + 1))
               const { res } = json
-              if (res) { rh(res, sessionId) }
+              if (res) { rh(mId, res, sessionId) }
             } catch (err) {
               console.dir(err)
             }
@@ -72,25 +84,28 @@ class SessionOps {
   }
 
   /* data is a string or buffer */
-  write(sessionId, data) {
+  write(sessionId, mId, data) {
     const socket = sessionMap.get(sessionId)
-    if (socket) { socket.write(data) }
+    if (!socket) { return }
+
+    if (socket) { socket.write(`${mId}:${data}`) }
   }
 
   getSessions() {
     return Array.from(sessionMap)
   }
 
-  async createSession({ sessionName, accountId, sessionLength = 1 }) {
+  async createSession({ title, description, accountId, sessionLength = 1 }) {
     /* 
-     * absolutely make sure to sanitize the sessionName before sending it to exec 
+     * absolutely make sure to sanitize the title and description before sending them to exec 
      * only allow word characters, spaces, dashes in the session name and NOTHING ELSE
      *
      * it should also be sanitized before even leaving the browser, but just be sure
      */
     if (!this.db) { throw new Error('Database not found') }
 
-    sessionName = sessionName.replace(/[^\w -]/g, '')
+    title = title.replace(/[^\w -]/g, '')
+    description = description.replace(/[^\w -]/g, '')
 
     /* start a new session container and return the container id */
     const createContainer = () => {
@@ -106,10 +121,11 @@ class SessionOps {
             '--network=jdam-net',
             `-d ${process.platform !== 'linux' ? '-p 25052:25052' : ''}`,
             `${process.platform !== 'linux' ? '' : '--add-host=host.docker.internal:host-gateway'}`,
-            /* '--rm', */
-            `-e NAME="${sessionName}"`,
+            '--rm',
+            `-e TITLE="${title}"`,
+            `-e DESCRIPTION="${description}"`,
             `-e SESSION_LENGTH=${sessionLength}`,
-            'jdam/test' ].join(' '), (error, stdout, stderr) => {
+            'jdam/session' ].join(' '), (error, stdout, stderr) => {
             if (error) { reject(error); return }
             if (stderr.length) { reject(stderr); return }
             /* 
@@ -170,7 +186,8 @@ class SessionOps {
     await sessions.insertOne(
       {
         _id: containerId,
-        name: sessionName,
+        title,
+        description,
         start: Date.now(),
         length: sessionLength * 60 * 1000, /* I am 100% going to regret/forget making this ms */
         ip,
@@ -180,31 +197,19 @@ class SessionOps {
 
     pendingSessions.set(containerId, { accountId, ip, rh: this.responseHandler })
 
-    return { sessionId: containerId, name: sessionName, length: sessionLength }
+    return { sessionId: containerId, title, description, length: sessionLength }
   }
 
   joinSession({ sessionId, accountId }) {
-    const sessionObj = sessionMap.get(sessionId)
-    if (!sessionObj) { return }
-
-    const socket = sessionObj
-    socket.write(JSON.stringify({ req : { addAccount: accountId }}))
+    this.write(sessionId, -1, JSON.stringify({ req : { addAccount: accountId }}))
   }
 
   leaveSession({ sessionId, accountId }) {
-    const sessionObj = sessionMap.get(sessionId)
-    if (!sessionObj) { return }
-
-    const socket = sessionObj
-    socket.write(JSON.stringify({ req : { deleteAccount: accountId }}))
+    this.write(sessionId, -1, JSON.stringify({ req : { deleteAccount: accountId }}))
   }
 
   endSession(sessionId) {
-    const sessionObj = sessionMap.get(sessionId)
-    if (!sessionObj) { return }
-
-    const socket = sessionObj
-    socket.write(JSON.stringify({ req : { endSession: true }}))
+    this.write(sessionId, -1, JSON.stringify({ req : { endSession: true }}))
   }
 
   /* find session(s) by name, accountId, or both */
@@ -220,6 +225,23 @@ class SessionOps {
     })
 
     return results
+  }
+
+  async purgeSessions() {
+    exec('bash -c "docker rm -f $(docker ps -aq -f ancestor=jdam/session)"')
+    const accounts = this.db.collection('accounts')
+    
+    try {
+      const sessions = this.db.collection('sessions')
+      await sessions.drop()
+    } catch (err) {
+      /* this will fail if 'sessions' is not found */
+    }
+    await accounts.updateMany(
+      { },
+      { '$set': { sessions: [] }}
+    )
+    sessionMap.clear()
   }
 }
 

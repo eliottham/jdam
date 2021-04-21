@@ -1,7 +1,5 @@
-import { useCallback, useState, useEffect } from 'react'
-import { 
-  LinearProgress
-} from '@material-ui/core'
+import { useState, useEffect } from 'react'
+import { LinearProgress } from '@material-ui/core'
 import { makeStyles } from '@material-ui/styles'
 
 const useStyles = makeStyles({
@@ -12,10 +10,10 @@ const useStyles = makeStyles({
   },
   formField: {
     position: 'relative',
-    width: 400,
+    /* minWidth: 400, */
     marginBottom: '1em',
     borderRadius: 4,
-    overflow: 'hidden',
+    /* overflow: 'hidden', */
     '& .MuiLinearProgress-root': {
       transform: 'translate3d(0, -100%, 0)',
       width: '100%',
@@ -66,24 +64,25 @@ const useStyles = makeStyles({
 })
 
 export interface FormFieldTemplate {
-    name: string,
-    child?: boolean,
-    label?: string,
-    type?: string,
-    confirm?: boolean,
+    name: string
+    child?: React.ReactNode
+    label?: string
+    type?: string
+    confirm?: boolean
     validation?: (input: string) => string[],
-    latentValidation?: (input: string) => Promise<string[]>,
+    latentValidation?: (input: string) => Promise<string[]>
     hint?: string
 }
 
 export interface FormFieldProps extends FormFieldTemplate {
-    fragment: boolean,
-    fieldValue?: string,
+    fragment: boolean
+    fieldValue?: string
     setFieldValue?: (newValue: string) => void
-    validate?: boolean,
-    onChange?: (newValue: string) => void,
-    onValidate: (valid: boolean) => void,
+    validate?: boolean
+    onChange?: (newValue: string) => void
+    onValidate?: (valid: boolean) => void
     onEnter?: (value: string, confirm: boolean) => void
+    children?: React.ReactNode
 }
 
 function FormField({
@@ -92,7 +91,7 @@ function FormField({
   validation,
   confirm,
   validate,
-  onValidate,
+  onValidate = () => { /* noop */ },
   latentValidation,
   ...props }: FormFieldProps): JSX.Element {
 
@@ -141,7 +140,7 @@ function FormField({
       return valid
     }
 
-    validateFieldValue(fieldValue ?? inputValue)
+    !props.children && validateFieldValue(fieldValue ?? inputValue)
 
     return () => {
       if (timeoutIndex) { window.clearTimeout(timeoutIndex) }
@@ -193,19 +192,23 @@ function FormField({
   const className = pendingValidation ? 'pending' : (validation && validationErrors.length ? 'invalid' : '')
   const filled = (fieldValue ?? inputValue) && validation ? 'filled' : ''
   const confirmFilled = confirmValue && validation ? 'filled' : ''
+  const useChildren = !!props.children
 
   return React.createElement(fragment ? React.Fragment : 'div', { ...!fragment && { className: classes.formField }}, [
     <div className={ classes.formLabel } key={ `label-${props.name}` }>{ props.label ? props.label : '' }</div>,
     <div className={ `${ classes.formField } ${confirm ? 'confirm' : ''}` } key={ `field-${props.name}` }>
-      <input 
-        type={ props.type ? props.type : "text" }
-        className={ `form-input ${className} ${filled ? 'filled' : ''}` } 
-        onChange={ onChange }
-        value={ fieldValue ?? inputValue }
-        onKeyUp={ onKeyupHandler }
-        { ...props.hint && { placeholder: props.hint }}
-      />
-      { confirm &&
+      { useChildren && props.children }
+      { !useChildren &&
+        <input 
+          type={ props.type ? props.type : "text" }
+          className={ `form-input ${className} ${filled ? 'filled' : ''}` } 
+          onChange={ onChange }
+          value={ fieldValue ?? inputValue }
+          onKeyUp={ onKeyupHandler }
+          { ...props.hint && { placeholder: props.hint }}
+        />
+      }
+      { (!useChildren && confirm) &&
         <input 
           type={ props.type ? props.type : "text" }  
           className={ `form-input confirm ${className} ${confirmFilled ? 'filled' : ''}` }

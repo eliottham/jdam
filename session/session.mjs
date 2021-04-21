@@ -5,12 +5,15 @@ const { MongoClient, ObjectID } = Mongo
 const PORT = 25052
 const NO_DOCKER = (process.env.NO_DOCKER === 'true' ? true : false)
 const CONTAINER = process.env.HOSTNAME
-const NAME = process.env.NAME
+const TITLE = process.env.TITLE
+const DESCRIPTION = process.env.DESCRIPTION
 const SESSION_LENGTH = process.env.SESSION_LENGTH ?? 1 /* in minutes */
 const MONGO_URL = `mongodb://${NO_DOCKER ? 'localhost' : 'host.docker.internal'}:27017`
 const MONGO_DB_NAME = 'jdam'
 
 const START_TS = new Date().valueOf()
+
+const separator = ':'.charCodeAt()
 
 const mongoClient = new MongoClient(MONGO_URL, { useUnifiedTopology: true })
 let db
@@ -18,17 +21,20 @@ let db
 const connectedAccounts = new Set()
 const connectedSockets = new Set()
 
-function response(ob) {
-  return JSON.stringify({
+function response(mId, ob) {
+  const message = mId + ':' + JSON.stringify({
     res: { connectedAccounts: Array.from(connectedAccounts), ...ob }
   })
+  console.log(message)
+  return message
 }
 
 function getInfo() {
   const currentTs = new Date().valueOf()
   return {
     containerId: CONTAINER,
-    name: NAME,
+    title: TITLE,
+    description: DESCRIPTION,
     sessionLength: SESSION_LENGTH,
     start: START_TS,
     end: START_TS + (SESSION_LENGTH * 60 * 1000),
@@ -65,12 +71,14 @@ async function deleteAccount(accountId) {
   connectedAccounts.delete(accountId)
 }
 
-async function processRequest(req, socket) {
+async function processRequest(mId, req, socket) {
   console.dir(req)
   if (typeof req === 'string') {
     switch (req) {
     case 'info':
-      socket.write(response(getInfo()))
+      socket.write(response(mId, {
+        info: getInfo()
+      }))
       break
     }
   } else if (typeof req === 'object') {
@@ -78,22 +86,22 @@ async function processRequest(req, socket) {
     if (req.addAccount) {
       try {
         await addAccount(req.addAccount)
-        socket.write(response({
+        socket.write(response(mId, {
           addAccount: req.addAccount
         }))
       } catch (err) {
-        socket.write(response({ 
+        socket.write(response(mId, { 
           error: err.message
         }))
       }
     } else if (req.deleteAccount) {
       try {
         await deleteAccount(req.deleteAccount)
-        socket.write(response({ 
+        socket.write(response(mId, { 
           deleteAccount: req.deleteAccount
         }))
       } catch (err) {
-        socket.write(response({ 
+        socket.write(response(mId, { 
           error: err.message
         }))
       }
@@ -110,12 +118,24 @@ const sessionServer = net.createServer(socket => {
 
   socket.on('data', data => {
     try {
-      const json = JSON.parse(data)
-      const { req } = json
-      processRequest(req, socket)
+      let splitIndex = -1
+      for (let a = 0; a < data.length; a++) {
+        const code = data[a]
+        if (code === separator) {
+          splitIndex = a
+          break
+        }
+      }
+      const mId = data.slice(0, splitIndex) 
+      try {
+        const json = JSON.parse(data.slice(splitIndex + 1))
+        const { req } = json
+        processRequest(mId, req, socket)
+      } catch (err) {
+        socket.write(response(mId, { errors: [ 'not json' ] }))
+      }
     } catch (err) {
-      /* not json */
-      socket.write(response({ errors: [ 'not json' ] }))
+      socket.write(response('-1', { errors: [ 'no message id or invalid message format' ] }))
     }
   })
   socket.on('error', () => {
@@ -125,7 +145,7 @@ const sessionServer = net.createServer(socket => {
 
 async function exit() {
   for (const socket of connectedSockets) {
-    socket.write(response({ 
+    socket.write(response('-1', { 
       endSession: true
     }))
     socket.end()
@@ -140,7 +160,7 @@ async function exit() {
    * from their sessions list
    */
 
-  await accounts.update(
+  await accounts.updateMany(
     { sessions: CONTAINER },
     { '$pull': { sessions: CONTAINER }}
   )
