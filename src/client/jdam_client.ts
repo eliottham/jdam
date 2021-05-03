@@ -11,7 +11,7 @@ interface JdamClientParams {
 }
 
 class JdamClient extends Evt {
-  _mId = 0
+  _mId = Math.ceil(Math.random() * Date.now())
   _pendingMessages: Map<number, (params: { prefix: string, mId: string, data: string }) => void> = new Map()
   username = ''
   nickname = ''
@@ -34,12 +34,23 @@ class JdamClient extends Evt {
     return this.webSocket.readyState === WebSocket.OPEN
   }
 
-  wsSend(prefix: string, message: string): Promise<{ prefix: string, mId: string, data: string }> {
+  wsSend(prefix: string, message: string, withMId = false): Promise<{ prefix: string, mId: string, data: string }> {
     return new Promise(resolve => {
       if (this.isWsConnected()) {
         this._mId++
-        this.webSocket?.send(`${prefix}:${this._mId}:${message}`)
-        this._pendingMessages.set(this._mId, resolve)
+        const mId = this._mId
+        this.webSocket?.send(`${prefix}:${mId}:${message}`)
+        if (withMId) {
+          this._pendingMessages.set(mId, resolve)
+          /* 
+           * clear the message out after 5 seconds - it doesn't matter if the
+           * message is actually there or not, the map can handle a delete on a
+           * key that isn't found.
+           */
+          setTimeout(() => {
+            this._pendingMessages.delete(mId)
+          }, 5000)
+        }
       }
     })
   }
@@ -67,6 +78,16 @@ class JdamClient extends Evt {
         } else if (typeof evt.data === 'string') {
           const [ prefix, mId ] = evt.data.split(':').slice(0, 2)
           const data = evt.data.slice(prefix.length + mId.length + 2)
+          const pendingMessage = this._pendingMessages.get(Number(mId))
+          if (pendingMessage) {
+            this._pendingMessages.delete(Number(mId))
+            pendingMessage({
+              prefix,
+              mId,
+              data
+            })
+            return
+          }
           switch (prefix) {
           case 'ses':
             try {
@@ -96,20 +117,12 @@ class JdamClient extends Evt {
                 this.sessions.clear()
                 this.fire('purge-sessions', {})
                 this.fire('set-sessions', { sessions: this.getSessions() })
+                this.setActiveSession()
               }
             } catch (err) {
               /* do nothing */
             }
             break
-          }
-          const pendingMessage = this._pendingMessages.get(Number(mId))
-          if (pendingMessage) {
-            this._pendingMessages.delete(Number(mId))
-            pendingMessage({
-              prefix,
-              mId,
-              data
-            })
           }
         }
       })
@@ -157,7 +170,6 @@ class JdamClient extends Evt {
               description,
               sessionId,
               accounts,
-              webSocket: this.webSocket,
               client: this
             }))
           }
@@ -238,7 +250,6 @@ class JdamClient extends Evt {
         description,
         sessionLength,
         sessionId,
-        webSocket: this.webSocket,
         client: this
       })
       this.sessions.set(sessionId, newSession)
@@ -269,7 +280,6 @@ class JdamClient extends Evt {
         title,
         description,
         sessionId,
-        webSocket: this.webSocket,
         client: this
       })
       this.sessions.set(sessionId, newSession)
@@ -284,12 +294,20 @@ class JdamClient extends Evt {
     return Array.from(this.sessions.values())
   }
 
-  setActiveSession(sessionId: string) {
+  setActiveSession(sessionId = '') {
+    if (!sessionId) {
+      this.fire('active-session', { sessionId: '', session: undefined })
+      this.activeSession = ''
+      return
+    }
+
     const session = this.sessions.get(sessionId)
     if (!session) return
 
     this.activeSession = sessionId
     this.fire('active-session', { sessionId, session })
+
+    session.setNodes()
   }
   
 }

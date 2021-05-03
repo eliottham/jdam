@@ -67,7 +67,7 @@ const sessionListener = net.createServer(socket => {
             sessionMap.delete(sessionId)
           })
         })
-        sessionMap.set(sessionId, socket)
+        sessionMap.set(sessionId, client)
 
       })
     } catch (err) {
@@ -243,6 +243,74 @@ class SessionOps {
     )
     sessionMap.clear()
   }
+
+  async reconnect() {
+
+    /* 
+     * get sessions from the mongodb
+     *
+     * we may want to corroborate with what we get back from scanning through
+     * the list of runnning docker processes... but in a super-scaled setup
+     * that may also be infeasible
+     */
+
+    if (!this.db) { throw new Error('Database not found') }
+
+    const sessions = this.db.collection('sessions')
+    const accounts = this.db.collection('accounts')
+    const cursor = await sessions.find()
+
+    await cursor.forEach(session => {
+      const { _id: sessionId, ip } = session
+      const client = net.createConnection({ host: ip, port: 25052 })
+      client.on('data', data => {
+        let splitIndex = -1
+        for (let a = 0; a < data.length; a++) {
+          const code = data[a]
+          if (code === separator) {
+            splitIndex = a
+            break
+          }
+        }
+        const mId = data.slice(0, splitIndex) 
+        try {
+          const json = JSON.parse(data.slice(splitIndex + 1))
+          const { res } = json
+          if (res) { this.responseHandler(mId, res, sessionId) }
+        } catch (err) {
+          console.dir(err)
+        }
+      })
+      client.on('end', () => {
+        /* TODO: resolve duplicate code */
+        try {
+          sessionMap.delete(sessionId)
+        } catch (err) {
+          console.dir(err)
+        }
+      })
+      client.on('error', () => { 
+        sessionMap.delete(sessionId)
+        /* 
+         * this means the session has terminated, but the database has an entry
+         * for it. It should be deleted from the database
+         */
+        sessions.deleteOne({ _id: sessionId })
+
+        /* 
+         * also have to update all accounts to pull this container
+         * from their sessions list
+         */
+        accounts.updateMany(
+          { sessions: sessionId },
+          { '$pull': { sessions: sessionId }}
+        )
+      })
+      sessionMap.set(sessionId, client)
+    })
+
+  }
+
 }
 
 sessionListener.listen(PORT, () => {
