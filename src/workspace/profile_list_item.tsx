@@ -8,16 +8,28 @@ import {
   IconButton
 } from '@material-ui/core'
 import SettingsIcon from '@material-ui/icons/Settings'
+import AccountSettingsDialog from './account_settings_dialog'
 
 function ProfileListItem(props: { client: JdamClient }) {
-
-  const [ username, setUsername ] = useState(props.client.username)
+  
+  const [ email, setEmail ] = useState(props.client.email)
   const [ nickname, setNickname ] = useState(props.client.nickname)
+  const [ avatarId, setAvatarId ] = useState(props.client.avatarId)
+  const [ openAccountSettings, setOpenAccountSettings ] = useState(false)
+
+  const handleOnOpenAccountSettings = () => {
+    setOpenAccountSettings(true)
+  }
+
+  const handleOnCloseAccountSettings = () => {
+    setOpenAccountSettings(false)
+  }
 
   useEffect(() => {
-    const onAccountInfo = ({ username, nickname }: { username: string, nickname: string }) => {
-      setUsername(username)
+    const onAccountInfo = ({ email, nickname, avatarId }: { email: string, nickname: string, avatarId: string }) => {
+      setEmail(email)
       setNickname(nickname)
+      setAvatarId(avatarId)
     }
 
     props.client.on('account-info', onAccountInfo)
@@ -27,15 +39,28 @@ function ProfileListItem(props: { client: JdamClient }) {
     }
   }, [])
 
+  const extraProps = {} as { src?: string }
+  if (avatarId) {
+    extraProps.src = `avatars/${avatarId}` 
+  }
+
   return (
     <ListItem className="profile-li">
       <ListItemAvatar>
-        <Avatar/>
+        <Avatar {...extraProps}/>
       </ListItemAvatar>
-      <ListItemText primary={ nickname } secondary = { username }/>
-      <IconButton>
+      <ListItemText primary={ nickname } secondary = { email }/>
+      <IconButton onClick={handleOnOpenAccountSettings}>
         <SettingsIcon/>
       </IconButton>
+      <AccountSettingsDialog
+        open={openAccountSettings}
+        onClose={handleOnCloseAccountSettings}
+        client={props.client}
+        email={email}
+        nickname={nickname}
+        avatarId={avatarId}
+      />
     </ListItem>
   )
 }

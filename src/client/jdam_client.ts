@@ -84,9 +84,10 @@ interface JdamClientParams {
 class JdamClient extends Evt {
   _mId = Math.ceil(Math.random() * Date.now())
   _pendingMessages: Map<number, (params: { prefix: string, mId: string, data: string }) => void> = new Map()
-  username = ''
+  email = ''
   nickname = ''
   hash = ''
+  avatarId = ''
   authToken = ''
   accountId = ''
   webSocket?: WebSocket
@@ -225,15 +226,41 @@ class JdamClient extends Evt {
     }
   }
 
+  async updateAccountSettings({ email, nickname, currentPassword, newPassword }: { email?: string, nickname?: string, currentPassword?: string, newPassword?: string }) {
+    const encoder = new TextEncoder()
+    let currentHash = ''
+    let newHash = ''  
+    let hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${this.email}${currentPassword}`)))
+    if (this.email && currentPassword) currentHash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))    
+    hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${newPassword || currentPassword}`)))
+    if (email && (newPassword || currentPassword)) newHash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))
+    
+    try {
+      const response = await fetch('account/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email, nickname, currentHash, newHash })
+      })
+      const responseJson = await response.json()
+      this.fire('update-account-settings', responseJson)
+    } catch (err) {
+      /* do nothing */
+    }
+  }
+
   async accountInfo() {
     if (!this.accountId || !this.authToken) return {}
     try {
-      const responseJson = await (await fetch('account', { method: 'GET'})).json()
+      const response = await fetch('account', { method: 'GET'})
+      const responseJson = await response.json()
       const { success, account } = responseJson
       if (success) {
-        this.username = account.email
+        this.email = account.email
         this.hash = account.hash
         this.nickname = account.nickname
+        this.avatarId = account.avatarId
         if (account.sessions.length) {
           for (const session of account.sessions) {
             const { _id: sessionId, title, description, accounts } = session
@@ -247,12 +274,31 @@ class JdamClient extends Evt {
           }
           this.fire('set-sessions', { sessions: this.getSessions() })
         }
-        this.fire('account-info', { username: this.username, nickname: this.nickname })
-
+        this.fire('account-info', { 
+          email: this.email,
+          nickname: this.nickname,
+          avatarId: this.avatarId 
+        })
       }
     } catch (err) {
       /* do nothing */
     }
+  }
+
+  async uploadAvatar(data: FormData) {
+    const response = await fetch('account/avatar', 
+      { 
+        method: 'POST',
+        body: data
+      })
+    const { avatarId, errors = [] } = await response.json()
+    this.fire('set-avatar-id', { errors })
+    this.avatarId = avatarId
+    this.fire('account-info', { 
+      email: this.email,
+      nickname: this.nickname,
+      avatarId: this.avatarId 
+    })
   }
 
   async logon(email?: string, password?: string, suppressErrors?: boolean) {

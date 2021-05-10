@@ -5,7 +5,9 @@ import WS from 'express-ws'
 import WebSocket from 'ws'
 import SessionOps from './session_ops.mjs'
 import Mongo from 'mongodb'
-const { MongoClient, ObjectID } = Mongo
+import multer from 'multer'
+import GridFsStorage from 'multer-gridfs-storage'
+const { MongoClient, ObjectID, GridFSBucket } = Mongo
 
 const PORT = 54049
 const MONGO_URL = 'mongodb://localhost:27017'
@@ -28,6 +30,18 @@ app.use(Express.static('public'))
 /* remember to use the json body-parser */
 app.use(Express.json())
 app.use(cookieParser())
+
+const avatarStorage = new GridFsStorage({
+  url: `${MONGO_URL}/${MONGO_DB_NAME}`,
+  options: { useNewUrlParser: true, useUnifiedTopology: true },
+  file: (req, file) => {
+    return {
+      bucketName: 'avatars',
+      filename: `${Date.now()}-${file.originalname}`
+    }
+  }
+})
+const avatarUpload = multer({ storage: avatarStorage })
 
 /* 
  * keep track of active authSessions
@@ -307,26 +321,26 @@ app.get('/account', useAuth(async (req, res, auth) => {
  * this function does NOT require auth -- in fact, it MUST NOT in order to
  * allow anyone to create a new account
  */
+const validateEmail = email => {
+  if (!email) { throw new Error('email must not be empty') }
+  email = email.trim() 
+  if (!email) { throw new Error('email must not be blank') }
+  if (!/^\w[^@]+@[^.]+\.\w+/.test(email)) { throw new Error('email is invalid') }
+}
+
+const validateHash = hash => {
+  if (!hash) { throw new Error('hash must not be empty') }
+  try {
+    Buffer.from(hash, 'base64')
+  } catch (err) {
+    throw new Error('hash is not valid base64')
+  }
+}
+
 app.post('/account', async (req, res) => {
   if (!db) {
     res.status(404).json({ success: false, errors: [ 'Database not found' ] })
     return
-  }
-
-  const validateEmail = email => {
-    if (!email) { throw new Error('email must not be empty') }
-    email = email.trim() 
-    if (!email) { throw new Error('email must not be blank') }
-    if (!/^\w[^@]+@[^.]+\.\w+/.test(email)) { throw new Error('email is invalid') }
-  }
-
-  const validateHash = hash => {
-    if (!hash) { throw new Error('hash must not be empty') }
-    try {
-      Buffer.from(hash, 'base64')
-    } catch (err) {
-      throw new Error('hash is not valid base64')
-    }
   }
 
   const { email, hash, nickname } = req.body
@@ -393,6 +407,97 @@ app.post('/account/sessions', useAuth(async (req, res, auth) => {
   const sessions = []
   res.status(200).json({ success: true, sessions })  
 }))
+
+app.post('/account/settings', useAuth(async (req, res, auth) => {
+  const errors = []
+  const { id } = auth
+  const account = await getAccount({ id })
+  const { email, nickname, currentHash, newHash } = req.body
+  if (email !== account.email || newHash) {
+    if (!currentHash) {
+      errors.push('Current password is required')
+    } else if (currentHash !== account.hash) {
+      errors.push('Current password is invalid')
+    }
+  }  
+  if (!nickname) {
+    errors.push('Nickname cannot be blank')
+  }
+  try { validateEmail(email) } catch (err) { if (err) errors.push(err.message) }
+  if (newHash) {
+    try { validateHash(newHash) } catch (err) { if (err) errors.push(err.message) }
+  }
+  if (errors.length) {
+    res.status(400).json({ success: false, errors })
+    return
+  }
+  await db.collection('accounts').update(
+    {
+      _id: new ObjectID(id)
+    },
+    {
+      $set: {
+        email: email,
+        nickname: nickname,
+        hash: newHash || account.hash
+      }
+    }
+  )
+
+  res.status(200).json({ success: true })
+}))
+
+
+
+app.post('/account/avatar', avatarUpload.single('avatar'), useAuth(async (req, res, auth) => {
+  const { id } = auth
+  /* new ObjectID checks to see req.file.id is valid otherwise useAuth will catch the error */ 
+  const avatarId = new ObjectID(req.file.id)
+  if (req.file.mimetype.split('/')[0] !== 'image') {
+    res.status(500).json({ success: false, errors: [ 'File type must be an image' ] })
+    return
+  }
+  await db.collection('accounts').update(
+    {
+      _id: new ObjectID(id)
+    },
+    {
+      $set: {
+        avatarId: avatarId
+      }
+    }
+  )
+  res.status(200).json({ avatarId: avatarId.toHexString() })
+}))
+
+function pipeMongoFile({ bucketName, fileId, outputStream }) {
+  try {
+    const bucketReadStream = new GridFSBucket(db, { bucketName }).openDownloadStream(fileId)
+    bucketReadStream.pipe(outputStream)
+  } catch (err) {
+    throw Error('file found definitely')
+  }
+}
+
+app.get('/avatars/:avatarId', useAuth(async (req, res, auth) => {
+  try {
+    const avatarId = new ObjectID(req.params.avatarId)
+    const fileData = await db.collection('avatars.files')?.findOne({
+      _id: avatarId
+    })
+    res.writeHead(200, {
+      'Content-Type': fileData.contentType
+    })
+    pipeMongoFile({
+      bucketName: 'avatars',
+      fileId: avatarId,
+      outputStream: res
+    }) 
+  } catch (err) {
+    res.status(404).end()
+  }
+}))
+
 
 app.get('/bounce', (req, res) => {
   try {
