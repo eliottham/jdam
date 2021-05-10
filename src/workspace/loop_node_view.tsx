@@ -6,13 +6,19 @@ import {
 } from '@material-ui/core'
 import { makeStyles } from '@material-ui/styles'
 
+const nodeWidth = 500
+const nodeHeight = 300
+export { nodeWidth, nodeHeight }
+
 const useStyles = makeStyles({
   root: {
-    height: 300,
-    width: 500,
+    height: nodeHeight,
+    width: nodeWidth,
     backgroundColor: 'var(--slt-grey)',
     border: '1px solid var(--primary)',
-    borderRadius: '0.5em'
+    borderRadius: '0.5em',
+    display: 'grid',
+    gridTemplateColumns: 'max-content 1fr'
   },
   paperMargin: {
     '&.MuiPaper-root': {
@@ -30,6 +36,12 @@ const useStyles = makeStyles({
         borderColor: 'var(--d-primary)'
       }
     }
+  },
+  trackOptions: {
+    backgroundColor: 'var(--lt-grey)',
+    padding: 4
+  },
+  trackLane: {
   },
   tail: {
 
@@ -57,7 +69,8 @@ function LoopNodeView(props: LoopNodeViewProps) {
   return (
     <Paper className={ `${classes.paperMargin} ${props.selected ? 'selected' : ''}` } onClick={ handleOnClick }>
       <div className={ classes.root }>
-        { props.node.uid }
+        <div className={ classes.trackOptions }>track 1</div>
+        <div className={ classes.trackLane }>sound visualization</div>
       </div>
     </Paper>
   )

@@ -14,6 +14,7 @@ import { makeStyles } from '@material-ui/styles'
 import ProfileListItem from './profile_list_item'
 import SessionListItem from './session_list_item'
 import LoopNodeLane from './loop_node_lane'
+import DeviceManager from './device_manager'
 
 import JdamClient from '../client/jdam_client'
 import Session from '../client/session'
@@ -30,7 +31,9 @@ const useStyles = makeStyles({
     '& > .content': {
       flex: 1,
       display: 'flex',
-      overflow: 'auto'
+      position: 'relative',
+      overflowY: 'scroll',
+      overflowX: 'hidden'
     }
   },
   workspaceDrawer: {
@@ -50,7 +53,6 @@ const useStyles = makeStyles({
     zIndex: 200
   }
 })
-
 
 function Workspace(props: { client: JdamClient }) {
 
@@ -174,6 +176,7 @@ function Workspace(props: { client: JdamClient }) {
             session={ activeSession } 
           />
         }
+        <DeviceManager client={ props.client } />
       </div>
       <div className={ classes.popupLayer }>
         <PopupErrors

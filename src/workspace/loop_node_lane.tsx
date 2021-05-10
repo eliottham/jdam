@@ -6,26 +6,34 @@ import { Fab } from '@material-ui/core'
 
 import Session from '../client/session'
 import LoopNode from '../client/loop_node'
-import LoopNodeView from './loop_node_view'
+import LoopNodeView, { nodeWidth, nodeHeight } from './loop_node_view'
 
 import AddIcon from '@material-ui/icons/Add'
 
 const useStyles = makeStyles({
   root: {
+    width: '100%'
   },
   lane: {
-    marginBottom: '2em',
+    '--index': 0,
+    marginBottom: '1em',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'flex-start',
+    height: nodeHeight + 32,
+    position: 'relative',
+    left: `calc(50% - ${nodeWidth / 2 + 8 + 4}px)`,
+    transform: `translate3d(calc(-${nodeWidth + 24}px * var(--index)), 0, 0)`,
+    transition: 'transform 500ms var(--ease-out)'
   },
   addButtonContainer: {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    margin: 8,
-    height: 300 / 2,
-    width: 500 / 2,
+    margin: 12,
+    height: nodeHeight,
+    width: nodeWidth,
+    minWidth: nodeWidth,
     backgroundColor: 'var(--slt-grey)',
     border: '1px solid var(--lt-grey)',
     borderRadius: 4,
@@ -49,6 +57,8 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
 
   const [ selectedNodeIndex, setSelectedNodeIndex ] = useState(rootNode.selectedNode)
   const [ children, setChildren ] = useState<LoopNode[]>(rootNode.children)
+  const [ maxWidth, setMaxWidth ] = useState(session.info.maxWidth || 4)
+  const [ maxDepth, setMaxDepth ] = useState(session.info.maxDepth || 4)
 
   useEffect(() => {
 
@@ -60,14 +70,21 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
       setChildren(children.slice())
     }
 
+    const onSetInfo = ({ info }: { info: { maxWidth: number, maxDepth: number }}) => {
+      setMaxWidth(info.maxWidth)
+      setMaxDepth(info.maxDepth)
+    }
+
     rootNode.on('set-children', onRootSetChildren)
     rootNode.on('set-selected-node', onSelectNode)
+    session.on('set-info', onSetInfo)
 
     return () => {
       rootNode.un('set-children', onRootSetChildren)
       rootNode.un('set-selected-node', onSelectNode)
+      session.un('set-info', onSetInfo)
     }
-  }, [ rootNode ])
+  }, [ rootNode, session ])
 
   const handleOnAddNode = () => {
     rootNode?.addNode()
@@ -81,7 +98,10 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
   
   return (
     <div className={ classes.root }>
-      <div className={ classes.lane }>
+      <div 
+        className={ classes.lane }
+        style={{ '--index': selectedNodeIndex } as React.CSSProperties }
+      >
         { !!children.length &&
         children.map((child, index)=> {
           return <LoopNodeView
@@ -91,7 +111,7 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
             onSelect={ handleOnSelect }
           />
         })}
-        { (children.length < session.info.maxWidth && depth < session.info.maxDepth) &&
+        { (children.length < maxWidth && depth < maxDepth) &&
           <div 
             className={ classes.addButtonContainer }
             onClick={ handleOnAddNode }
@@ -100,7 +120,7 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
           </div>
         }
       </div>
-      { (!!selectedNode && depth + 1 < session.info.maxDepth) &&
+      { (!!selectedNode && depth + 1 < maxDepth) &&
         <LoopNodeLane
           key={ `${selectedNodeIndex}-${selectedNode.uid}` }
           depth={ depth + 1 }

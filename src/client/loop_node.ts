@@ -1,5 +1,5 @@
 import Evt from './evt'
-import Session from './session'
+import Session, { Sound } from './session'
 
 interface LoopNodeParams {
   children?: LoopNode[]
@@ -12,7 +12,7 @@ class LoopNode extends Evt {
   children: LoopNode[] = []
   selectedNode = 0 /* index in children array */
   parent: LoopNode | undefined
-  sounds: Set<string> = new Set() /* references to uid only, sounds will be stored on client in a map */
+  sounds: Set<string> = new Set() /* references to uid only, sounds will be stored on session in a map */
   uid = ''
   session?: Session
 
@@ -23,6 +23,10 @@ class LoopNode extends Evt {
     if (parent) { this.inheritFrom(parent) }
     if (session) { this.session = session }
     this.uid = uid
+  }
+
+  getSound(uid: string) {
+    return this.session?.getSound(uid)
   }
 
   inheritFrom(parent: LoopNode) {

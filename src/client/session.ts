@@ -12,8 +12,11 @@ type GenericResponse = { [index: string]: any }
 class SessionSettings extends Settings {
 }
 
-class Sound {
+export class Sound {
   uid = ''
+  name = ''
+  volume = 1
+  pan = 0
   /* the sound buffer */
   buffer: Uint8Array = new Uint8Array(new ArrayBuffer(0))
 
@@ -59,7 +62,10 @@ interface SessionInfo {
 class Session extends Evt {
   rootNode = new LoopNode({ uid: 'root-node', session: this })
 
-  info = {} as SessionInfo 
+  info = {
+    maxWidth: 4,
+    maxDepth: 4
+  } as SessionInfo 
 
   sessionId = ''
   title = ''
@@ -96,7 +102,7 @@ class Session extends Evt {
 
     if (!params.sessionId) { throw Error('session id is required') }
 
-    this.getInfo()
+    this.setInfo()
   }
 
   setActive() {
@@ -133,7 +139,7 @@ class Session extends Evt {
     return recurse(this.rootNode, 0)
   }
 
-  async getInfo() {
+  async setInfo() {
     const response = await this.client.wsSend('jam', JSON.stringify({ 
       token: this.client.authToken,
       sessionId: this.sessionId,
@@ -145,6 +151,7 @@ class Session extends Evt {
       const rjson = JSON.parse(data)
       const { info } = rjson
       if (info) { Object.assign(this.info, info) }
+      this.fire('set-info', { info: this.info })
     }
   }
 
@@ -175,6 +182,7 @@ class Session extends Evt {
         if (parentNode) {
           newNode.inheritFrom(parentNode)
           parentNode.addChild(newNode)
+          parentNode.setSelectedNode(parentNode.children.indexOf(newNode))
         }
         this.fire('add-node', { addedNode: newNode, parentNode })
         this.fire('set-nodes', { root: this.rootNode })
@@ -250,6 +258,10 @@ class Session extends Evt {
       this.accounts.add(params.addAccount)
       this.fire('set-accounts', { accounts: this.getAccounts() })
     }
+  }
+
+  getSound(uid: string) {
+    return this.sounds.get(uid)
   }
 
 }

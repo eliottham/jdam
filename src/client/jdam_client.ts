@@ -3,6 +3,77 @@ import Session from './session'
 import Settings from './settings'
 
 class ClientSettings extends Settings {
+  inputs: MediaDeviceInfo[] = []
+  outputs: MediaDeviceInfo[] = []
+  muted = false
+  deafened = false
+  vidMuted = false
+  _gotMediaDevices = false
+
+  async enumerateAudioDevices() {
+    await navigator.mediaDevices.getUserMedia({audio: true, video: true})
+    this._gotMediaDevices = true
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    const inputs = []
+    const outputs = []
+    for (const device of devices) {
+      if (device.kind === 'audioinput') { inputs.push(device) }
+      else if (device.kind === 'audiooutput') { outputs.push(device) }
+    }
+
+    this.inputs.splice(0, this.inputs.length)
+    Array.prototype.push.apply(this.inputs, inputs)
+
+    this.outputs.splice(0, this.outputs.length)
+    Array.prototype.push.apply(this.outputs, outputs)
+
+    this.fire('enum-audio-devices', { inputs, outputs })
+  }
+
+  setSoundSettings(params: {
+    muted?: boolean
+    deafened?: boolean
+    vidMuted?: boolean
+  }) {
+    if ('muted' in params) {
+      this.muted = !!params.muted
+    }
+    if ('deafened' in params) {
+      this.deafened = !!params.deafened
+    }
+    if ('vidMuted' in params) {
+      this.vidMuted = !!params.vidMuted
+    }
+    this.fire('set-sound-settings', { 
+      muted: this.muted,
+      deafened: this.deafened,
+      vidMuted: this.vidMuted
+    })
+  }
+
+  setMuted(muted: boolean) {
+    this.setSoundSettings({ muted })
+  }
+
+  setDeafened(deafened: boolean) {
+    this.setSoundSettings({ deafened })
+  }
+
+  setVidMuted(vidMuted: boolean) {
+    this.setSoundSettings({ vidMuted })
+  }
+
+  toggleMuted() {
+    this.setSoundSettings({ muted: !this.muted })
+  }
+
+  toggleDeafened() {
+    this.setSoundSettings({ deafened: !this.deafened })
+  }
+
+  toggleVidMuted() {
+    this.setSoundSettings({ vidMuted: !this.vidMuted })
+  }
 }
 
 interface JdamClientParams {
@@ -26,6 +97,7 @@ class JdamClient extends Evt {
   constructor(params?: JdamClientParams) {
     super()
     Object.assign(this, {}, params)
+    this.settings.enumerateAudioDevices()
   }
 
   isWsConnected(): boolean {
@@ -309,6 +381,7 @@ class JdamClient extends Evt {
 
     session.setNodes()
   }
+
   
 }
 

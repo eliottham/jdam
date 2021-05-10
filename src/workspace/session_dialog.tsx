@@ -84,18 +84,19 @@ function SessionDialog({
 
   const [ errors, setErrors ] = useState<string[]>([])
   const [ showErrors, setShowErrors ] = useState(false)
-  const [ timeoutIndex, setTimeoutIndex ] = useState(-1)
   const [ formValid, setFormValid ] = useState(false)
 
   useEffect(() => {
+    let timeoutIndex = -1
+
     const onCreateSession = ({ errors = [] }: { errors: string[] }) => {
       setErrors(errors)
       setShowErrors(!!errors.length)
       if (errors.length) {
         if (timeoutIndex >= 0) { window.clearTimeout(timeoutIndex) }
-        setTimeoutIndex(window.setTimeout(() => {
+        timeoutIndex = window.setTimeout(() => {
           setShowErrors(false)
-        }, 5000))
+        }, 5000)
       }
     }
 
@@ -105,7 +106,7 @@ function SessionDialog({
       window.clearTimeout(timeoutIndex)
       if (!open) { setShowErrors(false) }
     }
-  }, [ props.client, open, timeoutIndex ])
+  }, [ props.client, open ])
 
 
   const handleOnCreateSession = (params: { title: string, description: string, length: number }) => {
