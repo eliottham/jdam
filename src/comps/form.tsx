@@ -1,3 +1,4 @@
+import React from 'react'
 import { useState } from 'react'
 import { Button } from '@material-ui/core'
 import FormField, { FormFieldTemplate, FormFieldProps } from './form_field'
@@ -6,6 +7,11 @@ import PopupErrors from './popup_errors'
 import { makeStyles } from '@material-ui/styles'
 
 const useStyles = makeStyles({
+  formLabel: {
+    fontVariant: 'all-small-caps',
+    fontSize: '1.5rem',
+    padding: '0.2em'
+  },
   form: {
     flex: 1,
     display: 'flex',
@@ -19,14 +25,14 @@ const useStyles = makeStyles({
       paddingTop: 24,
       '& .grid': {
         display: 'grid',
-        gridTemplateColumns: 'max-content 1fr',
+        gridAutoColumns: 'max-content 1fr',
         gridGap: '0.5em',
         flex: 1
       }
     }
   },
   launchButton: {
-    '&.MuiButton-root': {
+    '& .MuiButton-root': {
       margin: '1em 0 0'
     }
   }
@@ -106,7 +112,7 @@ function Form( { noSubmit = false, ...props }: FormProps ): JSX.Element {
      * existing list of children
      */
     if (React.isValidElement(template.child)) { 
-      return React.cloneElement(template.child, {
+      const child = React.cloneElement(template.child, {
         validate: true,
         key: `field-${template.name}`,
         fieldValue: (props.formFields ?? formFields)[template.name],
@@ -117,6 +123,18 @@ function Form( { noSubmit = false, ...props }: FormProps ): JSX.Element {
         ...template,
         confirm: template.confirm
       }, [])
+
+      if (template.label) {
+        return (
+          <React.Fragment>
+            <div className={ classes.formLabel } key={ `label-${template.name}` }>{ template.label || ''}</div>
+            {child}
+          </React.Fragment>
+        )
+      } else {
+        return child
+      }
+ 
     } 
 
     return <FormField 

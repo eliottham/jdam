@@ -6,13 +6,15 @@ const useStyles = makeStyles({
   formLabel: {
     fontVariant: 'all-small-caps',
     fontSize: '1.5rem',
-    padding: '0.2em'
+    padding: '0.2em',
+    gridColumn: 1
   },
   formField: {
     position: 'relative',
     /* minWidth: 400, */
     marginBottom: '1em',
     borderRadius: 4,
+    gridColumn: 2,
     /* overflow: 'hidden', */
     '& .MuiLinearProgress-root': {
       transform: 'translate3d(0, -100%, 0)',
@@ -74,14 +76,14 @@ export interface FormFieldTemplate {
     hint?: string
 }
 
-export interface FormFieldProps extends FormFieldTemplate {
+export interface FormFieldProps<valueType=string> extends FormFieldTemplate {
     fragment: boolean
     fieldValue?: string
     setFieldValue?: (newValue: string) => void
     validate?: boolean
-    onChange?: (newValue: string) => void
+    onChange?: (newValue: valueType) => void
     onValidate?: (valid: boolean) => void
-    onEnter?: (value: string, confirm: boolean) => void
+    onEnter?: (value: valueType, confirm: boolean) => void
     children?: React.ReactNode
 }
 
