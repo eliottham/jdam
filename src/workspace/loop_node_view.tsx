@@ -8,11 +8,38 @@ import { makeStyles } from '@material-ui/styles'
 
 const useStyles = makeStyles({
   root: {
+    height: 300,
+    width: 500,
+    backgroundColor: 'var(--slt-grey)',
+    border: '1px solid var(--primary)',
+    borderRadius: '0.5em'
+  },
+  paperMargin: {
+    '&.MuiPaper-root': {
+      margin: 4,
+      padding: 8,
+      borderRadius: '1em',
+      backgroundColor: 'var(--lt-grey)',
+      boxShadow: '0 2px 3px 0px rgba(0,0,0,0.25)',
+      transition: 'all 300ms var(--ease-out)',
+      '&.selected': {
+        backgroundColor: 'var(--primary)',
+        boxShadow: '0 2px 12px 0 rgb(0 0 0 / 50%)'
+      },
+      '& $root': {
+        borderColor: 'var(--d-primary)'
+      }
+    }
+  },
+  tail: {
+
   }
 })
 
 interface LoopNodeViewProps {
-  loopNode: LoopNode 
+  node: LoopNode
+  selected: boolean
+  onSelect?: (node:LoopNode) => void
 }
 
 function LoopNodeView(props: LoopNodeViewProps) {
@@ -21,11 +48,18 @@ function LoopNodeView(props: LoopNodeViewProps) {
 
   useEffect(() => {
     /* do nothing */
-  }, [ props.loopNode ])
+  }, [ props.node ])
+
+  const handleOnClick = () => {
+    props.onSelect?.(props.node)
+  }
 
   return (
-    <div className={ classes.root }>
-    </div>
+    <Paper className={ `${classes.paperMargin} ${props.selected ? 'selected' : ''}` } onClick={ handleOnClick }>
+      <div className={ classes.root }>
+        { props.node.uid }
+      </div>
+    </Paper>
   )
 }
 

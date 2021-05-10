@@ -1,36 +1,72 @@
-class Sound {
-  udid = ''
-  /* the sound buffer */
-  buffer: Uint8Array = new Uint8Array(new ArrayBuffer(0))
-
-  /* indices into the array buffer which define
-   * [0]: start extent, -inf db
-   * [1]: loop start, 0 db
-   * [2]: loop end, 0 db
-   * [3]: end extent, -inf db
-   *
-   * when uploading & recording, 0 and 3 will be non-zero
-   * but after trimming, they should be 0 and buffer.length - 1
-   */
-  stops: number[] = []
-}
+import Evt from './evt'
+import Session from './session'
 
 interface LoopNodeParams {
-  children: LoopNode[] | undefined
+  children?: LoopNode[]
+  parent?: LoopNode
+  session?: Session
+  uid: string
 }
 
-class LoopNode {
+class LoopNode extends Evt {
   children: LoopNode[] = []
+  selectedNode = 0 /* index in children array */
   parent: LoopNode | undefined
-  sounds: Sound[] = []
+  sounds: Set<string> = new Set() /* references to uid only, sounds will be stored on client in a map */
+  uid = ''
+  session?: Session
 
-  constructor(params: LoopNodeParams) {
-    if (params.children) this.children = params.children
+  constructor({ children, parent, uid, session }: LoopNodeParams) {
+    super()
+
+    if (children) { this.children = children }
+    if (parent) { this.inheritFrom(parent) }
+    if (session) { this.session = session }
+    this.uid = uid
   }
 
-  inheritFrom(parent: LoopNode | undefined) {
+  inheritFrom(parent: LoopNode) {
     this.parent = parent 
   }
+
+  setSelectedNode(index: number) {
+    if (index < 0 || index >= this.children.length) { return }
+
+    this.selectedNode = index
+    this.fire('set-selected-node', { index: this.selectedNode, node: this.children[index] })
+  }
+
+  setChildren(children: LoopNode[]) {
+    this.children = children
+    this.fire('set-children', { node: this, children })
+  }
+
+  addChild(child: LoopNode) {
+    this.children.push(child)
+    this.fire('add-child', { child, node: this })
+    this.fire('set-children', { node: this, children: this.children })
+  }
+
+  deleteChild(child: LoopNode) {
+    if (!this.children.length) { return }
+
+    const indexOf = this.children.indexOf(child)
+    if (indexOf < 0) { return }
+
+    this.children.splice(indexOf, 1)
+    this.fire('delete-child', { child, node: this })
+    this.fire('set-children', { node: this, children: this.children })
+  }
+
+  getSelectedNode() {
+    return this.children[this.selectedNode]
+  }
+
+  addNode() {
+    /* command the session to add a new node as a child for this node */
+    this.session?.addNode({ parentUid: this.uid })
+  }
+
 }
 
 export default LoopNode

@@ -1,5 +1,3 @@
-import JdamClient from '../client/jdam_client'
-import Session from '../client/session'
 import { useEffect, useState } from 'react'
 import {
   Drawer,
@@ -15,6 +13,12 @@ import { makeStyles } from '@material-ui/styles'
 
 import ProfileListItem from './profile_list_item'
 import SessionListItem from './session_list_item'
+import LoopNodeLane from './loop_node_lane'
+
+import JdamClient from '../client/jdam_client'
+import Session from '../client/session'
+
+import { PopupErrors } from '../comps/comps'
 
 const drawerWidth = 240
 
@@ -26,7 +30,7 @@ const useStyles = makeStyles({
     '& > .content': {
       flex: 1,
       display: 'flex',
-      flexDirection: 'column'
+      overflow: 'auto'
     }
   },
   workspaceDrawer: {
@@ -38,6 +42,12 @@ const useStyles = makeStyles({
       flexDirection: 'column',
       alignItems: 'center'
     }
+  },
+  popupLayer: {
+    position: 'absolute',
+    bottom: '0.5em',
+    right: '0.5em',
+    zIndex: 200
   }
 })
 
@@ -50,11 +60,32 @@ function Workspace(props: { client: JdamClient }) {
   const [ sessions, setSessions ] = useState<Session[]>([])
   const [ creatingSession, setCreatingSession ] = useState(false)
   const [ tabIndex, setTabIndex ] = useState(0)
+  const [ errors, setErrors ] = useState<string[]>([])
+  const [ showErrors, setShowErrors ] = useState(false)
 
   useEffect(() => {
-    const onSetActiveSession = ({ session }: { session: Session }) => {
+    let timeoutIndex = -1
+
+    const onError = ({ errors }: { errors: string[] }) => {
+      setErrors(errors)
+      setShowErrors(!!errors.length)
+      if (errors.length) {
+        if (timeoutIndex > -1) {
+          window.clearTimeout(timeoutIndex)
+        }
+        timeoutIndex = window.setTimeout(() => {
+          setShowErrors(false)
+        }, 5000)
+      }
+    }
+
+    const onSetActiveSession = ({ session }: { session?: Session }) => {
+      if (activeSession) {
+        activeSession.un('errors', onError)
+      }
       setActiveSession(session)
       setCreatingSession(false)
+      session?.on('errors', onError)
     }
 
     const onSetSessions = ({ sessions }: { sessions: Session[] }) => {
@@ -73,6 +104,7 @@ function Workspace(props: { client: JdamClient }) {
       props.client.un('set-sessions', onSetSessions)
       props.client.un('active-session', onSetActiveSession)
       props.client.un('cancel-create-session', onCancelCreateSession)
+      window.clearTimeout(timeoutIndex)
     }
   }, [ props.client ])
 
@@ -134,7 +166,20 @@ function Workspace(props: { client: JdamClient }) {
         />
       </Drawer>
       <div className="content">
-        Workspace
+        { !!activeSession && 
+          <LoopNodeLane
+            depth={ 0 }
+            key="root-lane"
+            rootNode={ activeSession.rootNode } 
+            session={ activeSession } 
+          />
+        }
+      </div>
+      <div className={ classes.popupLayer }>
+        <PopupErrors
+          errors={ errors }
+          showErrors={ showErrors }
+        />
       </div>
     </div>
   )

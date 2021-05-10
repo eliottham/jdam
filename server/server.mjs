@@ -3,7 +3,6 @@ import cookieParser from 'cookie-parser'
 import crypto from 'crypto'
 import WS from 'express-ws'
 import WebSocket from 'ws'
-import { exec } from 'child_process'
 import SessionOps from './session_ops.mjs'
 import Mongo from 'mongodb'
 import multer from 'multer'
@@ -13,7 +12,6 @@ const { MongoClient, ObjectID, GridFSBucket } = Mongo
 const PORT = 54049
 const MONGO_URL = 'mongodb://localhost:27017'
 const MONGO_DB_NAME = 'jdam'
-const NO_DOCKER = process.env.NO_DOCKER === 'true' ?  true : false
 
 const mongoClient = new MongoClient(MONGO_URL, { useUnifiedTopology: true })
 let db
@@ -577,7 +575,7 @@ function handleSocketResponse(mId, res, containerId) {
   for (const connectedAccount of connectedAccounts) {
     const token = accountAuthMap.get(connectedAccount)
     const authSessionObj = authSessionMap.get(token)
-    if (authSessionObj.client) {
+    if (authSessionObj?.client) {
       authSessionObj.client.send(`jam:${mId}:${JSON.stringify(res)}`) 
     }
   }
@@ -664,8 +662,7 @@ async function begin() {
     console.dir(err)
   }
 
-  /* eliminate any running docker containers for jdam/session */
-  await sessionOps.purgeSessions()
+  sessionOps.reconnect()
 
   app.listen(PORT, () => { 
     console.log(`server running on port: ${PORT}`) /* do nothing */ 
