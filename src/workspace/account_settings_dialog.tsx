@@ -3,6 +3,7 @@ import { BaseSyntheticEvent, useEffect, useState } from 'react'
 import { FormFieldTemplate, FormFieldProps } from '../comps/form_field'
 import { makeStyles } from '@material-ui/core/styles'
 import { Avatar, Button, Dialog, DialogProps } from '@material-ui/core'
+import CloseIcon from '@material-ui/icons/Close'
 import Form from '../comps/form'
 import Validation from '../client/validation'
 
@@ -27,6 +28,22 @@ const useStyles = makeStyles(theme => ({
     '& .MuiButton-root': {
       width: '15em'
     }
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between'
+  },
+  title: {
+    color: 'var(--primary)',
+    fontSize: '1.5rem',
+    fontVariant: 'all-small-caps'
+  },
+  closeButton: {
+    height: 24,
+    width: 24,
+    fontSize: 24,
+    color: 'var(--primary)',
+    cursor: 'pointer'
   }
 }))
 
@@ -69,7 +86,8 @@ export interface AccountSettingsDialogProps extends DialogProps {
     client: JdamClient,
     email: string,
     nickname: string,
-    avatarId?: string
+    avatarId?: string,
+    onClose: () => void
 }
 
 function AccountSettingsDialog({
@@ -83,6 +101,9 @@ function AccountSettingsDialog({
   const [ errors, setErrors ] = useState<string[]>([])
   const [ showErrors, setShowErrors ] = useState(false)
   const [ formFields, setFormFields ] = useState<{ [index: string]: string }>({ email: '', nickname: '' })
+  
+  const classes = useStyles()
+
   useEffect(() => {
     setFormFields({
       email,
@@ -113,9 +134,7 @@ function AccountSettingsDialog({
   }, [ client ])
 
   const handleAvatarChange = (file: File) => {
-    const data = new FormData()
-    data.append('avatar', file)
-    client.uploadAvatar(data)
+    client.uploadAvatar(file)
   }
 
   const handleOnSubmit = ({ email, nickname, currentPassword, newPassword }: { email?: string, nickname?: string, currentPassword?: string, newPassword?: string }) => {
@@ -160,17 +179,30 @@ function AccountSettingsDialog({
 
   return (
     <Dialog
-      open={open}
-      onClose={onClose}
+      open={ open }
+      onClose={ onClose }
+      PaperProps={{
+        style: {
+          padding: '15px'
+        }
+      }}
     >
+      <div className={ classes.header }>     
+        <div className={ classes.title }>
+          Settings
+        </div>
+        <div className={ classes.closeButton } onClick={ onClose }>
+          <CloseIcon/>
+        </div>
+      </div>
       <Form
-        fieldTemplates={fieldTemplates}
-        formValid={true}
-        formFields={formFields}
-        setFormFields={setFormFields}
-        errors={errors}
-        showErrors={showErrors}
-        onSubmit={handleOnSubmit}
+        fieldTemplates={ fieldTemplates }
+        formValid={ true }
+        formFields={ formFields }
+        setFormFields={ setFormFields }
+        errors={ errors }
+        showErrors={ showErrors }
+        onSubmit={ handleOnSubmit }
       />
     </Dialog>
   )

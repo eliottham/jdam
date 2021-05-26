@@ -5,8 +5,8 @@ import WS from 'express-ws'
 import WebSocket from 'ws'
 import SessionOps from './session_ops.mjs'
 import Mongo from 'mongodb'
-import multer from 'multer'
-import GridFsStorage from 'multer-gridfs-storage'
+import path from 'path'
+
 const { MongoClient, ObjectID, GridFSBucket } = Mongo
 
 const PORT = 54049
@@ -31,18 +31,6 @@ app.use(Express.static('public'))
 app.use(Express.json())
 app.use(cookieParser())
 
-const avatarStorage = new GridFsStorage({
-  url: `${MONGO_URL}/${MONGO_DB_NAME}`,
-  options: { useNewUrlParser: true, useUnifiedTopology: true },
-  file: (req, file) => {
-    return {
-      bucketName: 'avatars',
-      filename: `${Date.now()}-${file.originalname}`
-    }
-  }
-})
-const avatarUpload = multer({ storage: avatarStorage })
-
 /* 
  * keep track of active authSessions
  *
@@ -62,6 +50,10 @@ const authSessionMap = new Map()
  * account based on its ID value
  */
 const accountAuthMap = new Map()
+
+// app.get('/*', (req, res) => {
+//   res.sendFile(path.resolve('./public', 'main.js'))
+// })
 
 app.ws('/ws', ws => {
   ws.send('connected')
@@ -187,7 +179,6 @@ async function createAccount({ email, hash, nickname }) {
   } catch (err) {
     throw new Error('Account not created')
   }
-
 }
 
 async function getAccount({ hash, id, email }) {
@@ -363,6 +354,91 @@ app.post('/account', async (req, res) => {
 
 })
 
+app.post('/accounts/search', useAuth(async (req, res, auth) => {
+  res.status(200).json({ success: true, accounts: [] })
+}))
+
+app.post('/accounts/search/:searchQuery', useAuth(async (req, res, auth) => {
+  if (!db) { throw new Error('Database not found') }
+
+  const searchQuery = req.params.searchQuery
+  const accounts = db.collection('accounts')
+  let accountMatches = await accounts.find({
+    $or: [
+      { nickname: { $regex: searchQuery }},
+      { email: { $regex: searchQuery }}
+    ]
+  }).toArray()
+  res.status(200).json({ success: true, accounts: accountMatches || [] })  
+}))
+
+app.get('/accounts/friend/request', useAuth(async (req, res, auth) => {
+  const { id } = auth
+  const friendRequestAccounts = await db.collection('accounts').find({
+    friends: {
+      $elemMatch: {
+        _id: new ObjectID(id),
+        pending: true
+      }
+    }
+  }).toArray()
+  friendRequestAccounts.forEach(account => delete account.hash)
+  res.status(200).json({ success: true, friendRequests: friendRequestAccounts || [] })
+}))
+
+app.post('/accounts/friend/request', useAuth(async (req, res, auth) => {
+  const { id } = auth
+  const targetFriend = req.body
+  const account = await getAccount({ id })
+  
+  if (!account) {
+    res.status(404).json({ success: false, errors: [ 'Account not found' ]})
+    return
+  }
+
+  targetFriend._id = new ObjectID(targetFriend._id)
+
+  await db.collection('accounts').update(
+    {
+      _id: new ObjectID(id)
+    },
+    {
+      $push: {
+        friends: targetFriend
+      }
+    }
+  )
+  res.status(200).json({ success: true })
+}))
+
+app.delete('/accounts/friend', useAuth(async (req, res, auth) => {
+  const { id } = auth
+  const targetFriend = req.body
+  const account = await getAccount({ id })
+  
+  if (!account) {
+    res.status(404).json({ success: false, errors: [ 'Account not found' ]})
+    return
+  }
+
+  targetFriend._id = new ObjectID(targetFriend._id)
+
+  await db.collection('accounts').update(
+    {
+      _id: new ObjectID(id)
+    },
+    {
+      $pull: {
+        friends: {
+          _id: targetFriend._id,
+          nickname: targetFriend.nickname
+        }
+      }
+    }
+  )
+  res.status(200).json({ success: true })
+}))
+
 /* this one also requires auth to be disabled for validation */
 app.post('/account/available', async (req, res) => {
 
@@ -449,14 +525,22 @@ app.post('/account/settings', useAuth(async (req, res, auth) => {
 
 
 
-app.post('/account/avatar', avatarUpload.single('avatar'), useAuth(async (req, res, auth) => {
+app.post('/account/avatar', useAuth(async (req, res, auth) => {
   const { id } = auth
-  /* new ObjectID checks to see req.file.id is valid otherwise useAuth will catch the error */ 
-  const avatarId = new ObjectID(req.file.id)
-  if (req.file.mimetype.split('/')[0] !== 'image') {
+ 
+  const contentType = req.headers['content-type']
+  if (contentType?.split(';')[0].split('/')[0] !== 'image') {
     res.status(500).json({ success: false, errors: [ 'File type must be an image' ] })
     return
   }
+  const avatarId = new ObjectID()
+  await uploadMongoFile({
+    bucketName: 'avatars',
+    fileId: avatarId,
+    fileName: `avatarImage_${Date.now()}`,
+    contentType: contentType,
+    inputStream: req 
+  })
   await db.collection('accounts').update(
     {
       _id: new ObjectID(id)
@@ -470,7 +554,20 @@ app.post('/account/avatar', avatarUpload.single('avatar'), useAuth(async (req, r
   res.status(200).json({ avatarId: avatarId.toHexString() })
 }))
 
-function pipeMongoFile({ bucketName, fileId, outputStream }) {
+function uploadMongoFile({ bucketName, fileId, fileName, contentType, inputStream }) {
+  return new Promise((resolve, reject) => {
+    try {
+      const bucketWriteStream = new GridFSBucket(db, { bucketName }).openUploadStreamWithId(fileId, fileName, { contentType })
+      bucketWriteStream.on('finish', resolve)      
+      bucketWriteStream.on('error', reject)
+      inputStream.pipe(bucketWriteStream)
+    } catch (err) {
+      reject(Error('file not found definitely'))     
+    }
+  })
+}
+
+function downloadMongoFile({ bucketName, fileId, outputStream }) {
   try {
     const bucketReadStream = new GridFSBucket(db, { bucketName }).openDownloadStream(fileId)
     bucketReadStream.pipe(outputStream)
@@ -488,7 +585,7 @@ app.get('/avatars/:avatarId', useAuth(async (req, res, auth) => {
     res.writeHead(200, {
       'Content-Type': fileData.contentType
     })
-    pipeMongoFile({
+    downloadMongoFile({
       bucketName: 'avatars',
       fileId: avatarId,
       outputStream: res

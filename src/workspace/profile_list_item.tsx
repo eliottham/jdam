@@ -9,6 +9,7 @@ import {
 } from '@material-ui/core'
 import SettingsIcon from '@material-ui/icons/Settings'
 import AccountSettingsDialog from './account_settings_dialog'
+import Account from '../client/account'
 
 function ProfileListItem(props: { client: JdamClient }) {
   
@@ -26,10 +27,10 @@ function ProfileListItem(props: { client: JdamClient }) {
   }
 
   useEffect(() => {
-    const onAccountInfo = ({ email, nickname, avatarId }: { email: string, nickname: string, avatarId: string }) => {
-      setEmail(email)
-      setNickname(nickname)
-      setAvatarId(avatarId)
+    const onAccountInfo = ({ account }: { account: Account }) => {
+      setEmail(account.email)
+      setNickname(account.nickname)
+      setAvatarId(account.avatarId)
     }
 
     props.client.on('account-info', onAccountInfo)

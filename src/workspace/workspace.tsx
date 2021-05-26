@@ -3,9 +3,20 @@ import {
   Drawer,
   Divider,
   List,
-  Fab
+  Fab,
+  ListItem,
+  ListItemText,
+  ListItemIcon
 } from '@material-ui/core'
 import AddIcon from '@material-ui/icons/Add'
+import PeopleIcon from '@material-ui/icons/People'
+
+import {
+  BrowserRouter as Router,
+  Switch,
+  Route,
+  Link
+} from "react-router-dom"
 
 import SessionDialog from './session_dialog'
 
@@ -15,6 +26,7 @@ import ProfileListItem from './profile_list_item'
 import SessionListItem from './session_list_item'
 import LoopNodeLane from './loop_node_lane'
 import DeviceManager from './device_manager'
+import People from './people'
 
 import JdamClient from '../client/jdam_client'
 import Session from '../client/session'
@@ -137,54 +149,72 @@ function Workspace(props: { client: JdamClient }) {
   }
 
   return (
-    <div className={ classes.workspace }>
-      <Drawer
-        variant="permanent"
-        className={ classes.workspaceDrawer } 
-      >
-        <List>
-          <ProfileListItem client={ props.client }/> 
-          <Divider/>
-          {
-            sessions.map(session => {
-              return <SessionListItem 
-                active={ session === activeSession } 
-                key={ `session-${session.sessionId}` } 
-                session={ session }
-              />
-            })
-          }
-        </List>
-        <Fab color="primary" onClick={ handleOnCreateSession }>
-          <AddIcon/>
-        </Fab>
-        <SessionDialog 
-          client={ props.client }
-          open={ creatingSession }
-          tabIndex={ tabIndex }
-          setTabIndex={ setTabIndex }
-          onClose={ handleOnCloseSessionDialog }
-          onConfirm={ handleOnSubmitSession }
-        />
-      </Drawer>
-      <div className="content">
-        { !!activeSession && 
-          <LoopNodeLane
-            depth={ 0 }
-            key="root-lane"
-            rootNode={ activeSession.rootNode } 
-            session={ activeSession } 
+    <Router>
+      <div className={ classes.workspace }>
+        <Drawer
+          variant="permanent"
+          className={ classes.workspaceDrawer } 
+        >
+          <List>
+            <ProfileListItem client={ props.client }/> 
+            <Divider/>
+            <Link to="/people" style={{ textDecoration: 'none' }}>
+              <ListItem button>
+                <ListItemIcon>
+                  <PeopleIcon />
+                </ListItemIcon>
+                <ListItemText style={{ color: 'grey' }} primary="People" />
+              </ListItem>
+            </Link>
+            {
+              sessions.map(session => {
+                return <SessionListItem 
+                  active={ session === activeSession } 
+                  key={ `session-${session.sessionId}` } 
+                  session={ session }
+                />
+              })
+            }
+          </List>
+          <Fab color="primary" onClick={ handleOnCreateSession }>
+            <AddIcon/>
+          </Fab>
+          <SessionDialog 
+            client={ props.client }
+            open={ creatingSession }
+            tabIndex={ tabIndex }
+            setTabIndex={ setTabIndex }
+            onClose={ handleOnCloseSessionDialog }
+            onConfirm={ handleOnSubmitSession }
           />
-        }
-        <DeviceManager client={ props.client } />
+        </Drawer>
+        {/* <div className="content">  */}
+        <Switch>
+          <Route exact={true} path="/">                  
+            { !!activeSession && 
+              <LoopNodeLane
+                depth={ 0 }
+                key="root-lane"
+                rootNode={ activeSession.rootNode } 
+                session={ activeSession } 
+              />
+            }
+            <DeviceManager client={ props.client } />
+          </Route> 
+          <Route path="/people" render={ () => {
+            return <People client={props.client} />
+          }}>              
+          </Route>
+        </Switch>   
+        {/* </div> */}
+        <div className={ classes.popupLayer }>
+          <PopupErrors
+            errors={ errors }
+            showErrors={ showErrors }
+          />
+        </div>       
       </div>
-      <div className={ classes.popupLayer }>
-        <PopupErrors
-          errors={ errors }
-          showErrors={ showErrors }
-        />
-      </div>
-    </div>
+    </Router>
   )
 }
 

@@ -1,6 +1,7 @@
 import Evt from './evt'
 import Session from './session'
 import Settings from './settings'
+import Account from './account'
 
 class ClientSettings extends Settings {
   inputs: MediaDeviceInfo[] = []
@@ -94,6 +95,7 @@ class JdamClient extends Evt {
   sessions: Map<string, Session> = new Map()
   activeSession = ''
   settings = new ClientSettings()
+  account?: Account
 
   constructor(params?: JdamClientParams) {
     super()
@@ -226,6 +228,82 @@ class JdamClient extends Evt {
     }
   }
 
+  async findAccounts(searchQuery: string) {
+    try {
+      const response = await fetch(`accounts/search/${searchQuery || ''}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      const responseJson = await response.json()
+      const accounts = []
+      if (responseJson.success) {
+        for (const account of responseJson.accounts) {
+          delete account.hash
+          accounts.push(new Account(account))
+        }
+      }
+      this.fire('set-accounts', accounts)
+    } catch (err) {
+      /* do nothing */
+    }
+  }
+
+  async getFriendRequests() {
+    try {
+      const response = await fetch('accounts/friend/request', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      const responseJson = await response.json()
+      console.log(responseJson)
+    } catch (err) {
+      /* do nothing */
+    }
+  }
+
+  /* Send a friend request with the 'pending' flag set to true until the recipient confirms / denies */
+  async sendFriendRequest(targetFriend: Account) {
+    try {
+      await fetch('accounts/friend/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          _id: targetFriend._id,
+          nickname: targetFriend.nickname,
+          pending: true,
+          requested: new Date()
+        })
+      })
+      this.accountInfo()
+    } catch (err) {
+      /* do nothing */
+    }
+  }
+
+  async removeFriend(targetFriend: Account) {
+    try {
+      await fetch('accounts/friend', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          _id: targetFriend._id,
+          nickname: targetFriend.nickname
+        })
+      })
+      this.accountInfo()
+    } catch (err) {
+      /* do nothing */
+    }
+  }
+
   async updateAccountSettings({ email, nickname, currentPassword, newPassword }: { email?: string, nickname?: string, currentPassword?: string, newPassword?: string }) {
     const encoder = new TextEncoder()
     let currentHash = ''
@@ -251,16 +329,13 @@ class JdamClient extends Evt {
   }
 
   async accountInfo() {
-    if (!this.accountId || !this.authToken) return {}
+    if (!this.accountId) return {}
     try {
       const response = await fetch('account', { method: 'GET'})
       const responseJson = await response.json()
       const { success, account } = responseJson
       if (success) {
-        this.email = account.email
-        this.hash = account.hash
-        this.nickname = account.nickname
-        this.avatarId = account.avatarId
+        this.account = new Account(account)
         if (account.sessions.length) {
           for (const session of account.sessions) {
             const { _id: sessionId, title, description, accounts } = session
@@ -274,10 +349,8 @@ class JdamClient extends Evt {
           }
           this.fire('set-sessions', { sessions: this.getSessions() })
         }
-        this.fire('account-info', { 
-          email: this.email,
-          nickname: this.nickname,
-          avatarId: this.avatarId 
+        this.fire('account-info', {
+          account: this.account
         })
       }
     } catch (err) {
@@ -285,19 +358,20 @@ class JdamClient extends Evt {
     }
   }
 
-  async uploadAvatar(data: FormData) {
-    const response = await fetch('account/avatar', 
-      { 
-        method: 'POST',
-        body: data
-      })
+  async uploadAvatar(file: File) {
+    if (!this.account) { return }
+    const response = await fetch('account/avatar', { 
+      method: 'POST',
+      headers: {
+        'Content-Type': file.type
+      },        
+      body: file
+    })
     const { avatarId, errors = [] } = await response.json()
     this.fire('set-avatar-id', { errors })
-    this.avatarId = avatarId
-    this.fire('account-info', { 
-      email: this.email,
-      nickname: this.nickname,
-      avatarId: this.avatarId 
+    this.account.avatarId = avatarId
+    this.fire('account-info', {
+      account: this.account
     })
   }
 
