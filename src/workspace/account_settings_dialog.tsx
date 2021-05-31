@@ -7,6 +7,11 @@ import Form from '../comps/form'
 import Validation from '../client/validation'
 
 const useStyles = makeStyles(theme => ({
+  root: {
+    '& .MuiPaper-root': {
+      padding: '1em'
+    }
+  },
   uploadAvatar: {
     position: 'relative',
     display: 'flex',
@@ -35,9 +40,10 @@ interface UploadAvatarFormFieldProps extends FormFieldProps<File> {
 }
 
 function UploadAvatar({ avatarId, onChange }: UploadAvatarFormFieldProps): JSX.Element {
+  
   const classes = useStyles()
 
-  const handleChange = (event: BaseSyntheticEvent) => {
+  const handleFileChange = (event: BaseSyntheticEvent) => {
     const file = event.target.files[0]
     onChange?.(file)
   }
@@ -46,6 +52,7 @@ function UploadAvatar({ avatarId, onChange }: UploadAvatarFormFieldProps): JSX.E
   if (avatarId) {
     extraProps.src = `avatars/${avatarId}` 
   }
+
   return (
     <div className={ classes.uploadAvatar }>
       <Avatar className="avatar" { ...extraProps } />
@@ -53,8 +60,8 @@ function UploadAvatar({ avatarId, onChange }: UploadAvatarFormFieldProps): JSX.E
         id="upload-avatar"
         type="file" 
         accept="image/*"
-        style={{ display: 'none' }}
-        onChange={handleChange}
+        style={ { display: 'none' } }
+        onChange={ handleFileChange }
       />
       <label htmlFor="upload-avatar">
         <Button variant="contained" component="span">
@@ -80,9 +87,13 @@ function AccountSettingsDialog({
   nickname,
   ...props
 }: AccountSettingsDialogProps): JSX.Element {
+
+  const classes = useStyles()
+
   const [ errors, setErrors ] = useState<string[]>([])
   const [ showErrors, setShowErrors ] = useState(false)
   const [ formFields, setFormFields ] = useState<{ [index: string]: string }>({ email: '', nickname: '' })
+
   useEffect(() => {
     setFormFields({
       email,
@@ -160,17 +171,18 @@ function AccountSettingsDialog({
 
   return (
     <Dialog
-      open={open}
-      onClose={onClose}
+      open={ open }
+      onClose={ onClose }
+      className={ classes.root }
     >
       <Form
-        fieldTemplates={fieldTemplates}
-        formValid={true}
-        formFields={formFields}
-        setFormFields={setFormFields}
-        errors={errors}
-        showErrors={showErrors}
-        onSubmit={handleOnSubmit}
+        fieldTemplates={ fieldTemplates }
+        formValid={ true }
+        formFields={ formFields }
+        setFormFields={ setFormFields }
+        errors={ errors }
+        showErrors={ showErrors }
+        onSubmit={ handleOnSubmit }
       />
     </Dialog>
   )

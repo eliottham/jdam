@@ -1,10 +1,11 @@
 import Evt from './evt'
-import Session, { Sound } from './session'
+import Session, { Sound, SoundParams } from './session'
 
 interface LoopNodeParams {
   children?: LoopNode[]
   parent?: LoopNode
   session?: Session
+  sounds?: string[]
   uid: string
 }
 
@@ -16,17 +17,35 @@ class LoopNode extends Evt {
   uid = ''
   session?: Session
 
-  constructor({ children, parent, uid, session }: LoopNodeParams) {
+  constructor({ children, parent, uid, session, sounds }: LoopNodeParams) {
     super()
 
     if (children) { this.children = children }
     if (parent) { this.inheritFrom(parent) }
     if (session) { this.session = session }
+    if (sounds) {
+      for (const sound of sounds) {
+        this.sounds.add(sound)
+      }
+    }
     this.uid = uid
   }
 
   getSound(uid: string) {
     return this.session?.getSound(uid)
+  }
+
+  getSounds(): Sound[] {
+    if (!this.parent) { return [] }
+
+    const parentSounds = this.parent.getSounds()
+    const sounds = [] 
+    for (const soundUid of this.sounds) {
+      const sound = this.getSound(soundUid)
+      if (sound) { sounds.push(sound) }
+    }
+
+    return parentSounds.concat(sounds)
   }
 
   inheritFrom(parent: LoopNode) {
@@ -69,6 +88,18 @@ class LoopNode extends Evt {
   addNode() {
     /* command the session to add a new node as a child for this node */
     this.session?.addNode({ parentUid: this.uid })
+  }
+
+  editSound() {
+    this.session?.editSound({ node: this })
+  }
+
+  downloadSoundFile(uid: string) {
+    this.session?.downloadSoundFile(uid)
+  }
+
+  assignSound(soundUid: string) {
+    this.session?.assignSoundToNode({ soundUid, nodeUid: this.uid })
   }
 
 }

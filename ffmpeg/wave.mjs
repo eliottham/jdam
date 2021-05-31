@@ -56,9 +56,8 @@ function waveHeader({ length, channels = CHANNELS }) {
 
 async function metronome(
   bpm = 120,
-  beats = 4,
-  division = 4,
-  pattern = [ 2, 1 ] /* 2 for high ping, 1 for low ping, 0 for off */
+  /* division = 4, */
+  pattern = [ 2, 1, 1, 1 ] /* 2 for high ping, 1 for low ping, 0 for off */
 ) {
 
   /* 
@@ -69,14 +68,17 @@ async function metronome(
    * RAW PCM data length would then be (measure length) * SAMPLE_RATE
    */
 
-  const fileName = `./metro_${bpm}_${beats}-${division}`
+  // const fileName = `./metro_${bpm}_${beats}-${division}`
+  const beats = pattern.length
+  const fileName = `./metro_${bpm}_${beats}`
   const rawFile = path.resolve(fileName + '.raw')
   const wavFile = path.resolve(fileName + '.flac')
 
   const writeStream = fs.createWriteStream(rawFile)
 
-  const length = (beats * beats * 60) / (bpm * division)
-  const sampleSize = BYTE_DEPTH
+  // const length = (beats * beats * 60) / (bpm * division)
+  const length = (60 / bpm * beats)
+  const sampleSize = BYTE_DEPTH /* we are forcing mono, so omit multiplying by channel count */
   const offsetStartToStart = (length / beats) * SAMPLE_RATE * sampleSize /* bytes between the starts of each ping */
 
   const [ highPing, lowPing ] = await Promise.all([ fsp.readFile('./click_high.raw'), fsp.readFile('./click_low.raw') ])
@@ -132,7 +134,6 @@ async function metronome(
 }
 
 function convertRawToWav({ rawFile, wavFile, channels = CHANNELS, sampleRate = SAMPLE_RATE, bitDepth = BIT_DEPTH }) {
-
   return new Promise(resolve => {
     /* default is signed PCM little-endian data */
     const resolvedOutput = path.resolve(wavFile)
@@ -159,4 +160,67 @@ function convertRawToWav({ rawFile, wavFile, channels = CHANNELS, sampleRate = S
   })
 }
 
-metronome()
+function stream({
+  inputFile,
+  inputStream,
+  inputFormat,
+  outputStream,
+  channels = CHANNELS,
+  sampleRate = SAMPLE_RATE,
+  start,
+  end,
+  format = 's8' /* signed pcm raw */
+}) {
+  return new Promise((resolve, reject) => {
+    /* default is signed PCM little-endian data */
+
+    const args = [ 
+      '-ar', sampleRate, /* set the bit rate */
+      '-ac', channels, /* set the number of channels */
+      // '-c:a', `pcm_s24le`, /* audio codec for output file */
+      '-f', format,
+      'pipe:1' /* write directly to stdout, which we will pipe to outputStream */
+      // '2>', '/dev/null' /* pipe stderr to dev/null */
+    ]
+
+    if (!inputStream) {
+      const resolvedInput = path.resolve(inputFile)
+      args.unshift('-i', resolvedInput) /* input file */
+    } else {
+      args.unshift('-i', 'pipe:0') /* stdin */
+      args.unshift('-f', inputFormat) /* need to tell the input stream what format to be in */
+    }
+
+    if (end && !isNaN(end)) {
+      args.unshift('-to', `${end}ms`)
+    }
+
+    if (start && !isNaN(start)) {
+      args.unshift('-ss', `${start}ms`)
+    }
+
+    const proc = spawn('ffmpeg', args)
+    /*
+    proc.stdout.on('data', console.log)
+    proc.stderr.on('data', data => { console.log(data.toString('utf8')) })
+    */
+    proc.on('close', () => {
+      resolve()
+    })
+    proc.on('error', err => {
+      reject(err)
+    })
+
+    if (inputStream) {
+      inputStream.pipe(proc.stdin)
+    }
+
+    proc.stdout.pipe(outputStream)
+  })
+}
+
+export {
+  metronome,
+  convertRawToWav,
+  stream
+}

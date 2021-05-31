@@ -1,6 +1,7 @@
 import net from 'net'
 import { exec } from 'child_process'
 import Mongo from 'mongodb'
+import { paramParse } from 'jdam-utils'
 const { ObjectID } = Mongo
 
 const NO_DOCKER = process.env.NO_DOCKER === 'true' ?  true : false
@@ -95,7 +96,15 @@ class SessionOps {
     return Array.from(sessionMap)
   }
 
-  async createSession({ title, description, accountId, sessionLength = 1 }) {
+  async createSession({
+    title,
+    description,
+    accountId,
+    sessionLength = 1,
+    bpm,
+    measures,
+    pattern 
+  }) {
     /* 
      * absolutely make sure to sanitize the title and description before sending them to exec 
      * only allow word characters, spaces, dashes in the session name and NOTHING ELSE
@@ -119,12 +128,15 @@ class SessionOps {
         try {
           exec([ 'docker run',
             '--network=jdam-net',
-            `-d ${process.platform !== 'linux' ? '-p 25052:25052' : ''}`,
+            `-d ${process.platform !== 'linux' ? '-p 25052:25052 -p 25053:25053 -p 9230:9230' : ''}`,
             `${process.platform !== 'linux' ? '' : '--add-host=host.docker.internal:host-gateway'}`,
-            '--rm',
+            // '--rm',
             `-e TITLE="${title}"`,
             `-e DESCRIPTION="${description}"`,
             `-e SESSION_LENGTH=${sessionLength}`,
+            `-e BPM=${bpm}`,
+            `-e MEASURES=${measures}`,
+            `-e PATTERN=${process.platform !== 'linux' ? '"' + JSON.stringify(pattern) + '"' : "'" + JSON.stringify(pattern) + "'" }`,
             'jdam/session' ].join(' '), (error, stdout, stderr) => {
             if (error) { reject(error); return }
             if (stderr.length) { reject(stderr); return }
@@ -307,6 +319,52 @@ class SessionOps {
         )
       })
       sessionMap.set(sessionId, client)
+    })
+
+  }
+
+  async uploadFile({ sessionId, fileId, fileType, length, readStream, nodeUid }) {
+    const sessions = this.db.collection('sessions')
+    const session = await sessions.findOne({ _id: sessionId })
+    if (!session) { throw Error('Session not found for sessionId') }
+
+    const { ip } = session
+    const client = net.createConnection({ host: ip, port: 25053 })
+    client.write(`action=upload,fileType=${fileType},fileId=${fileId},length=${length},nodeUid=${nodeUid};`)
+    readStream.pipe(client)
+    return new Promise((resolve, reject) => {
+      client.on('error', err => {
+        reject(err) 
+      })
+      client.on('end', () => {
+        resolve(fileId) 
+      })
+    })
+  }
+
+  async downloadFile({ sessionId, fileId, writeStream }) {
+    const sessions = this.db.collection('sessions')
+    const session = await sessions.findOne({ _id: sessionId })
+    if (!session) { throw Error('Session not found for sessionId') }
+
+    const { ip } = session
+    const client = net.createConnection({ host: ip, port: 25053 })
+    client.write(`action=download,fileId=${fileId};`)
+
+    client.once('data', data => {
+      const dataParams = paramParse(data)
+
+      const { fileType, error } = dataParams
+
+      if (error) {
+        writeStream.writeHead(404, error).end()
+        return
+      }
+
+      writeStream.writeHead(200, {
+        'Content-Type': `audio/${fileType}`
+      })
+      client.pipe(writeStream)
     })
 
   }

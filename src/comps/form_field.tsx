@@ -65,18 +65,18 @@ const useStyles = makeStyles({
   }
 })
 
-export interface FormFieldTemplate {
+export interface FormFieldTemplate<valueType=string> {
     name: string
     child?: React.ReactNode
     label?: string
     type?: string
     confirm?: boolean
-    validation?: (input: string) => string[],
-    latentValidation?: (input: string) => Promise<string[]>
+    validation?: (input: valueType) => string[],
+    latentValidation?: (input: valueType) => Promise<string[]>
     hint?: string
 }
 
-export interface FormFieldProps<valueType=string> extends FormFieldTemplate {
+export interface FormFieldProps<valueType=string> extends FormFieldTemplate<valueType> {
     fragment: boolean
     fieldValue?: string
     setFieldValue?: (newValue: string) => void
@@ -207,7 +207,7 @@ function FormField({
           onChange={ onChange }
           value={ fieldValue ?? inputValue }
           onKeyUp={ onKeyupHandler }
-          { ...props.hint && { placeholder: props.hint }}
+          { ...props.hint && { placeholder: props.hint } }
         />
       }
       { (!useChildren && confirm) &&
@@ -217,7 +217,7 @@ function FormField({
           onChange={ onConfirm } 
           placeholder={ `Confirm ${props.label}` }
           onKeyUp={ onKeyupHandler }
-          { ...{confirm: 'confirm'}}
+          { ...{confirm: 'confirm'} }
         />
       }
       {

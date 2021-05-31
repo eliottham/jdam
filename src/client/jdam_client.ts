@@ -1,10 +1,15 @@
 import Evt from './evt'
 import Session from './session'
 import Settings from './settings'
+import Metro from './metro'
+
+export type AudioDeviceType = 'input' | 'output'
 
 class ClientSettings extends Settings {
   inputs: MediaDeviceInfo[] = []
   outputs: MediaDeviceInfo[] = []
+  selectedInput = 'default'
+  selectedOutput = 'default'
   muted = false
   deafened = false
   vidMuted = false
@@ -28,6 +33,33 @@ class ClientSettings extends Settings {
     Array.prototype.push.apply(this.outputs, outputs)
 
     this.fire('enum-audio-devices', { inputs, outputs })
+  }
+
+  getDevices({ type }: { type: AudioDeviceType }) {
+    const devices = type === 'input' ? this.inputs : this.outputs
+    const result = []
+    let index = 0
+    for (const device of devices) {
+      result.push({
+        kind: device.kind,
+        deviceId: device.deviceId,
+        groupId: device.groupId,
+        label: device.label,
+        index,
+        selected: this.selectedInput === device.deviceId
+      })
+      index ++
+    }
+    return result
+  }
+
+  getDevice({ type, deviceId }: { type: AudioDeviceType, deviceId: string }) {
+    const list = type === 'input' ? this.inputs : this.outputs
+    return list.find(device => device.deviceId === deviceId)
+  }
+
+  getSelectedDevice({ type }: { type: AudioDeviceType }) {
+    return this.getDevice({ type, deviceId: type === 'input' ? this.selectedInput : this.selectedOutput })
   }
 
   setSoundSettings(params: {
@@ -74,6 +106,15 @@ class ClientSettings extends Settings {
   toggleVidMuted() {
     this.setSoundSettings({ vidMuted: !this.vidMuted })
   }
+
+  setSelectedDevice({ type, deviceId }: { type: AudioDeviceType, deviceId: string }) {
+    if (type === 'input') {
+      this.selectedInput = deviceId
+    } else {
+      this.selectedOutput = deviceId
+    }
+    this.fire('set-selected-device', { type, deviceId })
+  }
 }
 
 interface JdamClientParams {
@@ -94,6 +135,7 @@ class JdamClient extends Evt {
   sessions: Map<string, Session> = new Map()
   activeSession = ''
   settings = new ClientSettings()
+  metro = new Metro()
 
   constructor(params?: JdamClientParams) {
     super()
@@ -226,14 +268,25 @@ class JdamClient extends Evt {
     }
   }
 
-  async updateAccountSettings({ email, nickname, currentPassword, newPassword }: { email?: string, nickname?: string, currentPassword?: string, newPassword?: string }) {
+  async updateAccountSettings({
+    email,
+    nickname,
+    currentPassword,
+    newPassword 
+  }: { 
+    email?: string,
+    nickname?: string,
+    currentPassword?: string,
+    newPassword?: string 
+  }) {
     const encoder = new TextEncoder()
-    let currentHash = ''
+    const currentHash = this.hash
+
+    /* calculate the new hash value based on the new email and new password */
     let newHash = ''  
-    let hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${this.email}${currentPassword}`)))
-    if (this.email && currentPassword) currentHash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))    
-    hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${newPassword || currentPassword}`)))
-    if (email && (newPassword || currentPassword)) newHash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))
+
+    const hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${newPassword || currentPassword}`)))
+    if (email && (newPassword || currentPassword)) { newHash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), '')) }
     
     try {
       const response = await fetch('account/settings', {
@@ -307,7 +360,7 @@ class JdamClient extends Evt {
 
     let hash = ''
     const hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${password}`)))
-    if (email && password) hash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))
+    if (email && password) { hash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), '')) }
 
     try {
       const response = await fetch('auth', {
@@ -332,6 +385,10 @@ class JdamClient extends Evt {
     }
   }
 
+  bounce() {
+    fetch('bounce', { method: 'GET' })
+  }
+
   async logoff() {
     const response = await fetch('unauth', {
       method: 'GET'
@@ -343,11 +400,17 @@ class JdamClient extends Evt {
   async createSession({
     title,
     description,
-    sessionLength = 1 
+    sessionLength = 1,
+    bpm = 120,
+    measures = 4,
+    pattern = [ 2, 1, 1, 1 ]
   }: { 
     title: string,
     description?: string,
-    sessionLength?: number 
+    sessionLength?: number,
+    bpm?: number,
+    measures?: number,
+    pattern?: number[]
   }) {
     try {
       const response = await fetch('session/create', {
@@ -355,7 +418,14 @@ class JdamClient extends Evt {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ title, description, sessionLength })
+        body: JSON.stringify({ 
+          title,
+          description,
+          sessionLength,
+          bpm,
+          measures,
+          pattern
+        })
       })
       const responseJson = await response.json()
       const { sessionId, success, errors = [] } = responseJson
@@ -428,7 +498,10 @@ class JdamClient extends Evt {
     session.setNodes()
   }
 
-  
+  getActiveSession() {
+    return this.sessions.get(this.activeSession)
+  }
+
 }
 
 export default JdamClient

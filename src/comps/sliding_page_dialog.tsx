@@ -1,9 +1,8 @@
 import {
-  Dialog,
   DialogProps
 } from '@material-ui/core'
 import ArrowBackIcon from '@material-ui/icons/ArrowBack'
-import CloseIcon from '@material-ui/icons/Close'
+import CloseableDialog from './closeable_dialog'
 
 import { makeStyles } from '@material-ui/styles'
 
@@ -12,16 +11,7 @@ const useStyles = makeStyles({
     minWidth: 500,
     minHeight: 500,
     overflow: 'hidden',
-    '& .close-button': {
-      position: 'absolute',
-      top: 8,
-      right: 8,
-      height: 24,
-      width: 24,
-      fontSize: 24,
-      color: 'var(--red)',
-      cursor: 'pointer'
-    },
+    transition: 'height 300ms var(--ease-out)',
     '& .back-button': {
       position: 'absolute',
       top: 8,
@@ -30,7 +20,8 @@ const useStyles = makeStyles({
       width: 24,
       fontSize: 24,
       color: 'var(--primary)',
-      cursor: 'pointer'
+      cursor: 'pointer',
+      zIndex: 200
     },
     '& .tab-offset': {
       '--index': '0',
@@ -50,11 +41,12 @@ const useStyles = makeStyles({
   }
 })
 
-export interface SlidingPageDialogProps extends DialogProps { 
+export interface SlidingPageDialogProps { 
   open: boolean,
   tabIndex: number,
   setTabIndex: (index: number) => void,
   onClose: () => void
+  height?: number
 }
 
 function SlidingPageDialog({ 
@@ -63,39 +55,37 @@ function SlidingPageDialog({
   setTabIndex,
   onClose,
   children,
+  height = 0,
   ...props 
-}: SlidingPageDialogProps): JSX.Element {
+}: SlidingPageDialogProps & DialogProps): JSX.Element {
 
   const classes = useStyles()
 
   return (
-    <Dialog
+    <CloseableDialog
       open={ open }
       onClose={ onClose }
       maxWidth={ false }
       { ...props }
     >
-      <div className={ `${classes.slidingPageDialog} flex-center` }>
+      <div className={ `${classes.slidingPageDialog} flex-center` } style={ { height } }>
         { tabIndex !== 0 &&
-          <div className="back-button flex-center" onClick={ () => { setTabIndex(0) }}>
+          <div className="back-button flex-center" onClick={ () => { setTabIndex(0) } }>
             <ArrowBackIcon/>
           </div>
         }
-        <div className="close-button flex-center" onClick={ onClose }>
-          <CloseIcon/>
-        </div>
         { /* this is a hack over here */ }
-        <div className="tab-offset" style={{ '--index': tabIndex > 0 ? '1' : '0' } as React.CSSProperties }>
+        <div className="tab-offset" style={ { '--index': tabIndex > 0 ? '1' : '0' } as React.CSSProperties }>
           { React.Children.map(children, (child, index) => {
             return (
-              <div className="page flex-center" style={{ display: index !== tabIndex && index > 0 ? 'none' : '' }}>
+              <div className="page flex-center" style={ { display: index !== tabIndex && index > 0 ? 'none' : '' } }>
                 { child }
               </div>
             ) })
           }
         </div>
       </div>
-    </Dialog>
+    </CloseableDialog>
   )
 }
 

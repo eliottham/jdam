@@ -1,8 +1,17 @@
-import LoopNode from '../client/loop_node'
-import Session from '../client/session'
-import { useEffect, useState } from 'react'
+import LoopNode from '../../client/loop_node'
+import { Sound } from '../../client/session'
+
+import { 
+  useEffect,
+  useState,
+  useRef,
+  BaseSyntheticEvent,
+  Fragment 
+} from 'react'
+
 import {
-  Paper
+  Paper,
+  Button
 } from '@material-ui/core'
 import { makeStyles } from '@material-ui/styles'
 
@@ -18,7 +27,8 @@ const useStyles = makeStyles({
     border: '1px solid var(--primary)',
     borderRadius: '0.5em',
     display: 'grid',
-    gridTemplateColumns: 'max-content 1fr'
+    gridTemplateColumns: 'max-content 1fr',
+    overflow: 'hidden'
   },
   paperMargin: {
     '&.MuiPaper-root': {
@@ -38,7 +48,7 @@ const useStyles = makeStyles({
     }
   },
   trackOptions: {
-    backgroundColor: 'var(--lt-grey)',
+    borderRight: '1px solid var(--lt-grey)',
     padding: 4
   },
   trackLane: {
@@ -54,23 +64,44 @@ interface LoopNodeViewProps {
   onSelect?: (node:LoopNode) => void
 }
 
-function LoopNodeView(props: LoopNodeViewProps) {
+function LoopNodeView({ node, selected, onSelect }: LoopNodeViewProps) {
 
   const classes = useStyles()
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const [ file, setFile ] = useState<File>()
+  const [ fileId, setFileId ] = useState('')
+  const [ sounds, setSounds ] = useState<Sound[]>(node.getSounds())
 
   useEffect(() => {
     /* do nothing */
-  }, [ props.node ])
+    const onFileUpload = ({ fileId = '' }: { fileId?: string }) => {
+      setFile(undefined)
+      setFileId(fileId)
+    }
+
+    node.on('file-upload', onFileUpload)
+
+    return () => {
+      node.un('file-upload', onFileUpload)
+    }
+  }, [ node ])
 
   const handleOnClick = () => {
-    props.onSelect?.(props.node)
+    onSelect?.(node)
   }
 
   return (
-    <Paper className={ `${classes.paperMargin} ${props.selected ? 'selected' : ''}` } onClick={ handleOnClick }>
+    <Paper className={ `${classes.paperMargin} ${selected ? 'selected' : ''}` } onClick={ handleOnClick }>
       <div className={ classes.root }>
-        <div className={ classes.trackOptions }>track 1</div>
-        <div className={ classes.trackLane }>sound visualization</div>
+        { sounds.map(sound => 
+          <Fragment key={ sound.uid }>
+            <div className={ classes.trackOptions }>{ sound.name }</div>
+            <div className={ classes.trackLane }>
+              sound visualization
+            </div>
+          </Fragment>
+        )}
       </div>
     </Paper>
   )

@@ -50,7 +50,9 @@ const useStyles = makeStyles({
   formWrapper: {
     padding: '1em',
     flex: 1,
-    width: 540
+    width: 540,
+    display: 'flex',
+    alignItems: 'center'
   },
   launchButton: {
     '&.MuiButton-root': {
@@ -165,10 +167,10 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
       className={ classes.loginDialog }
       open={ props.open }
     >
-      <div className="splash flex-center" style={{ flexDirection: "column", color: "white" }}>
-        <div style={{ fontSize: "2rem", marginBottom: "24px" }}>JDAM</div>
+      <div className="splash flex-center" style={ { flexDirection: "column", color: "white" } }>
+        <div style={ { fontSize: "2rem", marginBottom: "24px" } }>JDAM</div>
         <Icon url="assets/icons_proc/jdam.svg#jdam" className="white"/>
-        <div style={{ fontSize: "1.2rem", marginTop: "24px" }}>EXPLOSIVE JAMS!</div>
+        <div style={ { fontSize: "1.2rem", marginTop: "24px" } }>EXPLOSIVE JAMS!</div>
       </div>
       <div className="content-wrapper">
         <Tabs value={ tabIndex } onChange={ handleTabChange } centered>
@@ -186,7 +188,7 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
             onSubmit={ handleSubmit }
           />
         </div>
-        <div style={{ margin: '0 1em' }}>
+        <div style={ { margin: '0 1em' } }>
           <PopupErrors
             errors={ props.errors }
             showErrors={ props.showErrors }

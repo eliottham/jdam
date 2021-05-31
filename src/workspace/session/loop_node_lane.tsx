@@ -2,10 +2,8 @@ import { useEffect, useState } from 'react'
 
 import { makeStyles } from '@material-ui/styles'
 
-import { Fab } from '@material-ui/core'
-
-import Session from '../client/session'
-import LoopNode from '../client/loop_node'
+import Session from '../../client/session'
+import LoopNode from '../../client/loop_node'
 import LoopNodeView, { nodeWidth, nodeHeight } from './loop_node_view'
 
 import AddIcon from '@material-ui/icons/Add'
@@ -18,13 +16,16 @@ const useStyles = makeStyles({
     '--index': 0,
     marginBottom: '1em',
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'flex-start',
     height: nodeHeight + 32,
     position: 'relative',
     left: `calc(50% - ${nodeWidth / 2 + 8 + 4}px)`,
     transform: `translate3d(calc(-${nodeWidth + 24}px * var(--index)), 0, 0)`,
-    transition: 'transform 500ms var(--ease-out)'
+    transition: 'transform 500ms var(--ease-out)',
+    '&.full-depth': {
+      height: nodeHeight + 48
+    }
   },
   addButtonContainer: {
     display: 'flex',
@@ -96,11 +97,13 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
     rootNode.setSelectedNode(rootNode.children.indexOf(node))
   }
   
+  const canAdd = children.length < maxWidth && depth < maxDepth 
+
   return (
     <div className={ classes.root }>
       <div 
-        className={ classes.lane }
-        style={{ '--index': selectedNodeIndex } as React.CSSProperties }
+        className={ classes.lane + ((!selectedNode || depth + 1 >= maxDepth) ? ' full-depth' : '') }
+        style={ { '--index': selectedNodeIndex } as React.CSSProperties }
       >
         { !!children.length &&
         children.map((child, index)=> {
@@ -111,7 +114,7 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
             onSelect={ handleOnSelect }
           />
         })}
-        { (children.length < maxWidth && depth < maxDepth) &&
+        { canAdd &&
           <div 
             className={ classes.addButtonContainer }
             onClick={ handleOnAddNode }

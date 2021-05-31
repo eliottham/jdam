@@ -47,19 +47,19 @@ function ProfileListItem(props: { client: JdamClient }) {
   return (
     <ListItem className="profile-li">
       <ListItemAvatar>
-        <Avatar {...extraProps}/>
+        <Avatar { ...extraProps }/>
       </ListItemAvatar>
       <ListItemText primary={ nickname } secondary = { email }/>
-      <IconButton onClick={handleOnOpenAccountSettings}>
+      <IconButton onClick={ handleOnOpenAccountSettings }>
         <SettingsIcon/>
       </IconButton>
       <AccountSettingsDialog
-        open={openAccountSettings}
-        onClose={handleOnCloseAccountSettings}
-        client={props.client}
-        email={email}
-        nickname={nickname}
-        avatarId={avatarId}
+        open={ openAccountSettings }
+        onClose={ handleOnCloseAccountSettings }
+        client={ props.client }
+        email={ email }
+        nickname={ nickname }
+        avatarId={ avatarId }
       />
     </ListItem>
   )

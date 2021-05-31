@@ -65,11 +65,11 @@ function PopupErrors(props: PopupErrorsProps): JSX.Element {
       nodeRef={ errorsRef }
       timeout={ 500 }
       unmountOnExit={ true }
-      onEnter={()=>heightZero(errorsRef)}
-      onEntering={()=>heightToContent(errorsRef)}
-      onEntered={()=>heightUnset(errorsRef)}
-      onExit={()=>heightToContent(errorsRef)}
-      onExiting={()=>heightZero(errorsRef)}
+      onEnter={ ()=>heightZero(errorsRef) }
+      onEntering={ ()=>heightToContent(errorsRef) }
+      onEntered={ ()=>heightUnset(errorsRef) }
+      onExit={ ()=>heightToContent(errorsRef) }
+      onExiting={ ()=>heightZero(errorsRef) }
     >
       <Card className={ classes.errors } ref={ errorsRef }>
         <div>

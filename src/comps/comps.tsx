@@ -5,6 +5,8 @@ import Icon from './icon'
 import Form from './form'
 import PopupErrors from './popup_errors'
 import FormSlider from './slider'
+import CloseButton from './close_button'
+import CloseableDialog from './closeable_dialog'
 
 export {
   FormField,
@@ -13,5 +15,7 @@ export {
   SlidingPageDialog,
   Form,
   PopupErrors,
-  FormSlider
+  FormSlider,
+  CloseButton,
+  CloseableDialog
 }

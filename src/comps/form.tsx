@@ -1,5 +1,5 @@
 import React from 'react'
-import { useState } from 'react'
+import { useState, useRef, useLayoutEffect } from 'react'
 import { Button } from '@material-ui/core'
 import FormField, { FormFieldTemplate, FormFieldProps } from './form_field'
 import PopupErrors from './popup_errors'
@@ -16,12 +16,10 @@ const useStyles = makeStyles({
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    minHeight: '100%',
     '& .grid-wrapper': {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      flex: 1,
       paddingTop: 24,
       '& .grid': {
         display: 'grid',
@@ -32,7 +30,7 @@ const useStyles = makeStyles({
     }
   },
   launchButton: {
-    '& .MuiButton-root': {
+    '&.MuiButton-root': {
       margin: '1em 0 0'
     }
   }
@@ -50,6 +48,7 @@ interface FormProps {
   setFormFields?: (fields: { [index: string]: string }) => void
   errors?: string[]
   showErrors?: boolean
+  autoHeight?: (height: number) => void
 }
 
 function Form( { noSubmit = false, ...props }: FormProps ): JSX.Element {
@@ -60,6 +59,8 @@ function Form( { noSubmit = false, ...props }: FormProps ): JSX.Element {
   const [ formFields, setFormFields ] = useState<{ [index: string]: string }>({
     ...props.fieldTemplates.reduce<{ [index: string]: string }>((ob, temp) => { ob[temp.name] = ''; return ob }, {})
   })
+
+  const formRef = useRef<HTMLDivElement>(null)
 
   /* keep track of field validity separately 
    *
@@ -72,7 +73,17 @@ function Form( { noSubmit = false, ...props }: FormProps ): JSX.Element {
   const [ formFieldsValid, setFormFieldsValid ] = useState<{ [index: string]: boolean }>({
     ...props.fieldTemplates.reduce<{ [index: string]: boolean }>((ob, temp) => { ob[temp.name] = !temp.validation; return ob }, {})
   })
+
   const [ formValid, setFormValid ] = useState(true)
+
+  useLayoutEffect(() => {
+    if (props.autoHeight) {
+      const rect = formRef.current?.getBoundingClientRect()
+      if (rect) {
+        props.autoHeight?.(Math.ceil(rect.height) + 32)
+      }
+    }
+  })
 
   const handleSubmit = () => {
     props.onSubmit?.({
@@ -124,16 +135,7 @@ function Form( { noSubmit = false, ...props }: FormProps ): JSX.Element {
         confirm: template.confirm
       }, [])
 
-      if (template.label) {
-        return (
-          <React.Fragment>
-            <div className={ classes.formLabel } key={ `label-${template.name}` }>{ template.label || ''}</div>
-            {child}
-          </React.Fragment>
-        )
-      } else {
-        return child
-      }
+      return child
  
     } 
 
@@ -163,7 +165,7 @@ function Form( { noSubmit = false, ...props }: FormProps ): JSX.Element {
   }
 
   return (
-    <div className={ classes.form }>
+    <div className={ classes.form } ref={ formRef }>
       <div className="grid-wrapper">
         <div className="grid">
           { createFields() } 

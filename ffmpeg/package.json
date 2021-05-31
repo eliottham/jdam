@@ -1,0 +1,14 @@
+{
+  "name": "ffmpeg",
+  "version": "1.0.0",
+  "description": "microservice for processing audio files sent from the client",
+  "main": "ffmpeg.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "gheld",
+  "license": "ISC",
+  "dependencies": {
+    "jdam-utils": "file:../jdam-utils"
+  }
+}

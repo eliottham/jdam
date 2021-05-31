@@ -1,6 +1,11 @@
 import Mongo from 'mongodb'
 import net from 'net'
 import LoopNode from './loop_node.mjs'
+import fs, { promises as fsp } from 'fs'
+import path from 'path'
+import crypto from 'crypto'
+import { paramParse } from 'jdam-utils'
+import http from 'http'
 const { MongoClient, ObjectID } = Mongo
 
 const PORT = 25052
@@ -11,6 +16,11 @@ const DESCRIPTION = process.env.DESCRIPTION
 const SESSION_LENGTH = Number(process.env.SESSION_LENGTH ?? 1) /* in minutes */
 const MONGO_URL = `mongodb://${NO_DOCKER ? 'localhost' : 'host.docker.internal'}:27017`
 const MONGO_DB_NAME = 'jdam'
+const PATTERN = JSON.parse(process.env.PATTERN || "[ 2, 1, 1, 1 ]")
+const BPM = Number(process.env.BPM || "120")
+const MEASURES = Number(process.env.MEASURES || "4")
+
+const FFMPEG_URL = `http://${NO_DOCKER ? 'localhost' : 'host.docker.internal'}:48000`
 
 const MAX_DEPTH = 4
 const MAX_WIDTH = 4
@@ -26,7 +36,16 @@ const connectedAccounts = new Set()
 const connectedSockets = new Set()
 const rootNode = new LoopNode()
 const sounds = new Map()
+
+const inProgressSoundStreams = new Map()
+
 rootNode.uid = 'root-node'
+
+function generateRandomBitString(length, encoding = 'base64') {
+  const byteBuffer = Buffer.allocUnsafe(length) 
+  crypto.randomFillSync(byteBuffer)
+  return byteBuffer.toString(encoding)
+}
 
 function response(mId, ob) {
   const message = mId + ':' + JSON.stringify({
@@ -47,8 +66,89 @@ function getInfo() {
     end: START_TS + (SESSION_LENGTH * 60 * 1000),
     duration: currentTs - START_TS,
     maxDepth: MAX_DEPTH,
-    maxWidth: MAX_WIDTH
+    maxWidth: MAX_WIDTH,
+    pattern: PATTERN,
+    bpm: BPM,
+    measures: MEASURES
   }
+}
+
+function beginSoundStream({ action, socket, fileId, fileType, fileName, length }) {
+  const errors = []
+  if (!fileId) {
+    errors.push('fileId not specified') 
+  } else if (/\W/.test(fileId)) {
+    errors.push('fileId must only contain word characters')
+  }
+
+  if (action === 'upload') {
+    if (!fileType) { errors.push('file type not specified') }
+    if (!length) { errors.push('length not specified') }
+    length = Number(length)
+    if (isNaN(length)) { errors.push('length must be a number') }
+
+    /* 
+     * only allow one upload for a give fileId, but if simultaneous downloads
+     * are requested, then that is acceptable
+     */
+    if (inProgressSoundStreams.has(fileId)) { errors.push('there is already a pending upload for this fileId') }
+  }
+
+  if (errors.length) { throw Error(errors.join('\n')) }
+
+  const streamMeta = {
+    action,
+    fileId,
+    fileType,
+    length,
+    offset: 0
+  }
+
+  if (action === 'upload') {
+    const resolvedPath = path.resolve(`./sounds/${fileId}.${fileType}`)
+    const writeStream = fs.createWriteStream(resolvedPath)
+    writeStream.on('error', () => {
+      inProgressSoundStreams.delete(socket)
+    })
+    writeStream.on('close', () => {
+      inProgressSoundStreams.delete(socket)
+      try {
+        messageAll({
+          uploadedSoundFile: fileId
+        })
+        messageAll(upsertSound({
+          uid: fileId,
+          name: fileName,
+          path: resolvedPath
+        }))
+      } catch (err) {
+        messageAll({
+          error: err.message
+        })
+      }
+    })
+    socket.pipe(writeStream)
+    streamMeta.writeStream = writeStream
+  } else if (action === 'download') {
+    const files = fs.readdirSync(path.resolve('./sounds'))
+
+    /* the first character is a dot; slice everything after that */
+    const fileType = path.extname(files.find(file => file.startsWith(fileId))).slice(1)
+    const resolvedPath = path.resolve(`./sounds/${fileId}.${fileType}`)
+    const readStream = fs.createReadStream(resolvedPath)
+    readStream.on('error', () => {
+      inProgressSoundStreams.delete(socket)
+    })
+    readStream.on('end', () => {
+      inProgressSoundStreams.delete(socket)
+    })
+    socket.write(`fileType=${fileType};`)
+    readStream.pipe(socket)
+    streamMeta.readStream = readStream
+  }
+
+  inProgressSoundStreams.set(socket, streamMeta)
+  return streamMeta
 }
 
 async function addAccount(accountId) {
@@ -107,6 +207,9 @@ function abbreviateNode(node) {
       return child.uid
     })
   }
+  if (node.sounds.size) {
+    result.sounds = Array.from(node.sounds)
+  }
   return result
 }
 
@@ -149,6 +252,68 @@ function deleteNode({ uid }) {
   return { deletedNode: abbreviateNode(node) }
 }
 
+function upsertSound(params = {}) {
+
+  if (typeof params !== 'object') { throw Error('params must be an object') }
+
+  const { 
+    nodeUid,
+    accountId,
+    uid = generateRandomBitString(12, 'hex'),
+    name, 
+    volume = 1,
+    pan = 0, 
+    stops = [],
+    path 
+  } = params
+
+  const existingSound = sounds.get(uid)
+
+  const newSoundData = { 
+    accountId,
+    uid,
+    name: name || uid.slice(0, 12),
+    volume,
+    pan,
+    stops,
+    path
+  }
+
+  if (existingSound) {
+    Object.assign(existingSound, params)
+    return { updatedSound: existingSound }
+  } else {
+    sounds.set(uid, newSoundData)
+
+    if (nodeUid) {
+      assignSoundToNode({ nodeUid, soundUid: uid })
+    }
+    
+    return { insertedSound: newSoundData }
+  }
+}
+
+function deleteSound(uid) {
+  if (sounds.has(uid)) {
+    sounds.delete(uid)
+    return { deletedSound: uid }
+  }
+}
+
+function assignSoundToNode({ nodeUid, soundUid }) {
+  const sound = sounds.get(soundUid)
+  if (!sound) { throw Error('sound not found') }
+
+  if (sound.ownerNode) { throw Error('cannot reassign sound from one node to another') }
+
+  const { node } = findNode(nodeUid)
+  if (!node) { throw Error('node not found') }
+
+  node.sounds.add(soundUid)
+  sound.ownerNode = node
+  return { assignedSound: sound, toNode: abbreviateNode(node) }
+}
+
 function getNodes() {
   const recurse = node => {
     const result = abbreviateNode(node)
@@ -158,66 +323,69 @@ function getNodes() {
   return { root: recurse(rootNode) }
 }
 
+function messageAll(payload, excludeSocket) {
+  for (const socket of connectedSockets) {
+    if (socket === excludeSocket) { continue }
+    socket.write(response('-1', payload))
+  }
+}
+
 async function processRequest(mId, req, socket) {
   console.dir(req)
+  const payload = {}
   if (typeof req === 'string') {
     switch (req) {
     case 'info':
-      socket.write(response(mId, {
+      Object.assign(payload, {
         info: getInfo()
-      }))
+      })
       break
     case 'nodes':
-      socket.write(response(mId, getNodes()))
+      Object.assign(payload, getNodes())
       break
     }
   } else if (typeof req === 'object') {
     /* TODO: handle complex object requests */
-    if (req.addAccount) {
-      try {
+    try {
+      if (req.addAccount) {
         await addAccount(req.addAccount)
-        socket.write(response(mId, {
+        Object.assign(payload, {
           addAccount: req.addAccount
-        }))
-      } catch (err) {
-        socket.write(response(mId, { 
-          error: err.message
-        }))
-      }
-    } else if (req.deleteAccount) {
-      try {
+        })
+      } else if (req.deleteAccount) {
         await deleteAccount(req.deleteAccount)
-        socket.write(response(mId, { 
+        Object.assign(payload, { 
           deleteAccount: req.deleteAccount
-        }))
-      } catch (err) {
-        socket.write(response(mId, { 
-          error: err.message
-        }))
-      }
-    } else if (req.endSession) {
-      exit()
-    } else if ('addNode' in req) {
-      try {
-        socket.write(response(mId, addNode({
+        })
+      } else if (req.endSession) {
+        exit()
+      } else if ('addNode' in req) {
+        Object.assign(payload, addNode({
           parentUid: req.addNode 
-        })))
-      } catch (err) {
-        socket.write(response(mId, { 
-          error: err.message
         }))
-      }
-    } else if (req.deleteNode) {
-      try {
-        socket.write(response(mId, deleteNode({
+      } else if (req.deleteNode) {
+        Object.assign(payload, deleteNode({
           uid: req.deleteNode
-        })))
-      } catch (err) {
-        socket.write(response(mId, { 
-          error: err.message
         }))
+      } else if (req.assignSound && req.toNode) {
+        Object.assign(payload, assignSoundToNode({
+          soundUid: req.assignSound,
+          nodeUid: req.toNode
+        }))
+      } else if (req.upsertSound) {
+        Object.assign(payload, upsertSound(req.upsertSound))
+      } else if (req.deleteSound) {
+        Object.assign(payload, deleteSound(req.deleteSound))
       }
+    } catch (err) {
+      Object.assign(payload, { 
+        error: err.message
+      })
     }
+  }
+  if (Object.keys(payload).length) {
+    socket.write(response(mId, payload))
+    messageAll(payload, socket)
   }
 }
 
@@ -251,6 +419,32 @@ const sessionServer = net.createServer(socket => {
   socket.on('error', () => {
     connectedSockets.delete(socket)
   })
+  socket.on('close', () => {
+    connectedSockets.delete(socket)
+  })
+
+})
+
+const streamingServer = net.createServer(socket => {
+ 
+  socket.once('data', data => {
+    const inProgressSoundStream = inProgressSoundStreams.get(socket)
+    if (inProgressSoundStream) {
+      const { writeStream } = inProgressSoundStream
+      if (writeStream) {
+        writeStream.write(data)
+      }
+    } else {
+      const dataParams = paramParse(data)
+      const { action, fileId, fileType, length, fileName } = dataParams
+      try {
+        beginSoundStream({ action, socket, fileId, fileType, length, fileName })
+      } catch (err) { 
+        inProgressSoundStreams.delete(socket)
+        socket.write(`error=${err.message};`)
+      }
+    }
+  })
 })
 
 async function exit() {
@@ -280,8 +474,14 @@ async function exit() {
 
 async function begin() {
 
+  await fsp.mkdir(path.resolve('./sounds'), { recursive: true })
+
   sessionServer.listen(PORT, () => {
     console.log(`session server running on port: ${PORT}`) /* do nothing */ 
+  })
+
+  streamingServer.listen(PORT + 1, () => {
+    console.log(`streaming server running on port: ${PORT + 1}`) /* do nothing */ 
   })
 
   try {

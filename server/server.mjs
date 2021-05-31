@@ -1,12 +1,14 @@
 import Express from 'express'
 import cookieParser from 'cookie-parser'
-import crypto from 'crypto'
+import { generateRandomBitString } from 'jdam-utils'
 import WS from 'express-ws'
 import WebSocket from 'ws'
 import SessionOps from './session_ops.mjs'
 import Mongo from 'mongodb'
 import multer from 'multer'
 import GridFsStorage from 'multer-gridfs-storage'
+import fs, { promises as fsp } from 'fs'
+import path from 'path'
 const { MongoClient, ObjectID, GridFSBucket } = Mongo
 
 const PORT = 54049
@@ -19,7 +21,6 @@ let sessionOps
 
 const AUTH_COOK = 'auth-token'
 const EXPIRATION_THRESHOLD = (15 * 60 * 1000) /* 15 minutes in ms */
-
 
 /* new express app */
 const appBase = Express()
@@ -218,10 +219,8 @@ async function getAccount({ hash, id, email }) {
 
 /* this should probably be something like a JWT */
 function generateSessionToken(withAccountId) {
-  const byteBuffer = Buffer.allocUnsafe(24) 
-  crypto.randomFillSync(byteBuffer)
   const date = new Date()
-  const b64 = byteBuffer.toString('base64')
+  const b64 = generateRandomBitString(24)
   authSessionMap.set(b64, { expires: date.valueOf() + EXPIRATION_THRESHOLD, ...!!withAccountId && { id: withAccountId }})
   if (withAccountId) { accountAuthMap.set(withAccountId, b64) }
   return b64
@@ -479,7 +478,7 @@ function pipeMongoFile({ bucketName, fileId, outputStream }) {
   }
 }
 
-app.get('/avatars/:avatarId', useAuth(async (req, res, auth) => {
+app.get('/avatars/:avatarId', useAuth(async (req, res) => {
   try {
     const avatarId = new ObjectID(req.params.avatarId)
     const fileData = await db.collection('avatars.files')?.findOne({
@@ -584,7 +583,14 @@ function handleSocketResponse(mId, res, containerId) {
 app.put('/session/create', useAuth(async (req, res, auth) => {
   const { id, token } = auth 
 
-  const { title, description = '', sessionLength } = req.body
+  const {
+    title,
+    description = '',
+    sessionLength,
+    bpm,
+    pattern,
+    measures
+  } = req.body
 
   if (!title) { 
     res.status(400).json({ success: false, errors: [ 'A title must be specified for the session' ] })
@@ -592,7 +598,16 @@ app.put('/session/create', useAuth(async (req, res, auth) => {
   }
 
   try {
-    const sessionInfo = await sessionOps.createSession({ title, description, accountId: id, token, sessionLength })
+    const sessionInfo = await sessionOps.createSession({ 
+      title,
+      description,
+      accountId: id,
+      token,
+      sessionLength,
+      bpm,
+      measures,
+      pattern
+    })
     res.status(200).json({ success: true, ...sessionInfo })
   } catch (err) {
     res.status(400).json({ success: false, errors: [ err.message ] })
@@ -647,6 +662,76 @@ app.get('/sessions', (req, res) => {
   }
   res.status(200).write(output, () => { res.end() })
 })
+
+app.post('/sessions/:sessionId/stream/upload', useAuth(async (req, res, auth) => {
+  if (!sessionOps) {
+    res.status(500).json({ success: false, errors: [ 'session ops unavailable' ] })
+    return
+  }
+
+  /* Key-value pairs of header names and values. Header names are lower-cased. */
+  const contentType = req.headers['content-type']
+  const fileType = contentType?.split(';')[0].split('/')[1]
+  if (!fileType) {
+    res.status(410).json({ success: false, errors: [ 'invalid file type supplied' ] })
+    return
+  }
+
+  const fileId = req.query.fileId || generateRandomBitString(12, 'hex')
+
+  const result = await sessionOps.uploadFile({
+    sessionId: req.params.sessionId,
+    fileId,
+    fileType,
+    length: 0,
+    account: auth.id,
+    readStream: req
+  })
+
+  if (result !== fileId) {
+    /* this is a pretty interesting case here */
+    res.status(500).json({ success: false, errors: [ 'what did you do? :(' ] })
+    return
+  }
+
+  res.status(200).json({ success: true, fileId })
+}))
+
+app.get('/sessions/:sessionId/stream/download/:fileId', useAuth(async (req, res) => {
+  if (!sessionOps) {
+    res.status(500).json({ success: false, errors: [ 'session ops unavailable' ] })
+    return
+  }
+
+  const fileId = req.params.fileId
+
+  if (!fileId) {
+    res.status(410).json({ success: false, errors: [ 'fileId must be specified' ] })
+    return
+  }
+
+  sessionOps.downloadFile({
+    sessionId: req.params.sessionId,
+    fileId,
+    writeStream: res
+  })
+
+}))
+
+app.get('/metro/pings/:pingName', useAuth(async (req, res) => {
+  const pingName = req.params.pingName.replace(/[^\w-]/g, '')
+  try { 
+    const resolvedPath = path.resolve(`./session/${pingName}.raw`)
+    await fsp.stat(resolvedPath)
+    const readStream = fs.createReadStream(resolvedPath)
+    res.writeHead(200, {
+      'Content-Type': 'application/pcm_s24le'
+    })
+    readStream.pipe(res)
+  } catch (err) { 
+    res.status(404).end()
+  }
+}))
 
 
 async function begin() {

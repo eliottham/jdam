@@ -7,19 +7,17 @@ import {
 } from '@material-ui/core'
 import AddIcon from '@material-ui/icons/Add'
 
-import SessionDialog from './session_dialog'
+import SessionDialog from './session/session_dialog'
+import SessionView from './session/session_view'
 
 import { makeStyles } from '@material-ui/styles'
 
 import ProfileListItem from './profile_list_item'
 import SessionListItem from './session_list_item'
-import LoopNodeLane from './loop_node_lane'
 import DeviceManager from './device_manager'
 
 import JdamClient from '../client/jdam_client'
 import Session from '../client/session'
-
-import { PopupErrors } from '../comps/comps'
 
 const drawerWidth = 240
 
@@ -45,12 +43,6 @@ const useStyles = makeStyles({
       flexDirection: 'column',
       alignItems: 'center'
     }
-  },
-  popupLayer: {
-    position: 'absolute',
-    bottom: '0.5em',
-    right: '0.5em',
-    zIndex: 200
   }
 })
 
@@ -62,32 +54,11 @@ function Workspace(props: { client: JdamClient }) {
   const [ sessions, setSessions ] = useState<Session[]>([])
   const [ creatingSession, setCreatingSession ] = useState(false)
   const [ tabIndex, setTabIndex ] = useState(0)
-  const [ errors, setErrors ] = useState<string[]>([])
-  const [ showErrors, setShowErrors ] = useState(false)
 
   useEffect(() => {
-    let timeoutIndex = -1
-
-    const onError = ({ errors }: { errors: string[] }) => {
-      setErrors(errors)
-      setShowErrors(!!errors.length)
-      if (errors.length) {
-        if (timeoutIndex > -1) {
-          window.clearTimeout(timeoutIndex)
-        }
-        timeoutIndex = window.setTimeout(() => {
-          setShowErrors(false)
-        }, 5000)
-      }
-    }
-
     const onSetActiveSession = ({ session }: { session?: Session }) => {
-      if (activeSession) {
-        activeSession.un('errors', onError)
-      }
       setActiveSession(session)
       setCreatingSession(false)
-      session?.on('errors', onError)
     }
 
     const onSetSessions = ({ sessions }: { sessions: Session[] }) => {
@@ -102,13 +73,26 @@ function Workspace(props: { client: JdamClient }) {
     props.client.on('active-session', onSetActiveSession)
     props.client.on('cancel-create-session', onCancelCreateSession)
 
+    let activityTimerId = -1
+    
+    const onActivity = () => {
+      props.client.bounce()
+      activityTimerId = window.setTimeout(() => {
+        window.addEventListener('mousemove', onActivity, { once: true }) 
+      }, 5 * 1000 * 60)
+    }
+
+    window.addEventListener('mousemove', onActivity, { once: true }) 
+
     return () => {
       props.client.un('set-sessions', onSetSessions)
       props.client.un('active-session', onSetActiveSession)
       props.client.un('cancel-create-session', onCancelCreateSession)
-      window.clearTimeout(timeoutIndex)
+      window.removeEventListener('mousemove', onActivity) 
+      window.clearTimeout(activityTimerId)
     }
   }, [ props.client ])
+
 
   const handleOnCreateSession = () => {
     setCreatingSession(true)
@@ -119,15 +103,27 @@ function Workspace(props: { client: JdamClient }) {
     title = '',
     description = '',
     length,
-    sessionId = '' 
+    sessionId = '',
+    bpm = 120,
+    pattern = [ 2, 1, 1, 1 ]
   }: { 
     join: boolean,
     title?: string,
     description?: string,
     length?: number,
-    sessionId?: string
+    sessionId?: string,
+    bpm?: number,
+    pattern?: number[]
   }) => {
-    if (!join) { props.client.createSession({ title, description, sessionLength: length }) }
+    if (!join) { 
+      props.client.createSession({ 
+        title,
+        description,
+        sessionLength: length,
+        bpm,
+        pattern
+      })
+    }
     else { props.client.joinSession({ sessionId }) }
   }
 
@@ -137,7 +133,9 @@ function Workspace(props: { client: JdamClient }) {
   }
 
   return (
-    <div className={ classes.workspace }>
+    <div 
+      className={ classes.workspace }
+    >
       <Drawer
         variant="permanent"
         className={ classes.workspaceDrawer } 
@@ -169,21 +167,12 @@ function Workspace(props: { client: JdamClient }) {
       </Drawer>
       <div className="content">
         { !!activeSession && 
-          <LoopNodeLane
-            depth={ 0 }
-            key="root-lane"
-            rootNode={ activeSession.rootNode } 
-            session={ activeSession } 
+          <SessionView
+            session={ activeSession }
           />
         }
-        <DeviceManager client={ props.client } />
       </div>
-      <div className={ classes.popupLayer }>
-        <PopupErrors
-          errors={ errors }
-          showErrors={ showErrors }
-        />
-      </div>
+      <DeviceManager client={ props.client } />
     </div>
   )
 }

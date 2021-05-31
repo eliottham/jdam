@@ -13,6 +13,7 @@
     "express": "^4.17.1",
     "express-ws": "^4.0.0",
     "mongodb": "^3.6.6",
+    "jdam-utils": "file:../jdam-utils",
     "ws": "^5.2.2"
   }
 }

@@ -54,10 +54,10 @@ function Icon({ iconSize = 24, ...props }: IconProps): JSX.Element {
 
   return (
     <svg
-      className={`${classes.icon} ${props.className || ''}`}
-      viewBox={`0 0 ${iconSize} ${iconSize}`}
+      className={ `${classes.icon} ${props.className || ''}` }
+      viewBox={ `0 0 ${iconSize} ${iconSize}` }
     >
-      <use href={props.url}/>
+      <use href={ props.url }/>
     </svg>
   )
 }
