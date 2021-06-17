@@ -271,18 +271,35 @@ class Transport extends Evt implements ITransport {
 
     stops.push(soundLocalPlayhead)
     const times = stops.map(stop => Math.max(0, phr(lToA(stop))) / 1000)
+    const adjAmount = 0.05
 
     if (soundLocalPlayhead < stops[1]) {
-      const gainAtStart = lerp(stops[0], stops[1], soundLocalPlayhead)
-      env.gain.setValueAtTime(gainAtStart, currentTime + Math.max(times[0], times[4]))
+      let adj = 0
+      if (soundLocalPlayhead > stops[0]) {
+        /* ramp env when starting to play to smooth out */
+        env.gain.setValueAtTime(0, 0)
+        env.gain.linearRampToValueAtTime(1, currentTime + adjAmount)
+        adj = adjAmount
+      }
+      const gainAtStart = lerp(stops[0], stops[1], soundLocalPlayhead + adj)
+      env.gain.setValueAtTime(gainAtStart, currentTime + Math.max(times[0], times[4]) + adj)
       env.gain.linearRampToValueAtTime(1, currentTime + times[1])
     } else if (soundLocalPlayhead <= stops[2]) {
-      env.gain.setValueAtTime(1, 0)
+      /* ramp env when starting to play to smooth out */
+      env.gain.setValueAtTime(0, 0)
+      env.gain.linearRampToValueAtTime(1, currentTime + adjAmount)
     }
 
     if (soundLocalPlayhead < stops[3]) {
-      const gainAtEnd = lerp(stops[3], stops[2], soundLocalPlayhead)
-      env.gain.setValueAtTime(gainAtEnd, currentTime + Math.max(times[2], times[4]))
+      let adj = 0
+      if (soundLocalPlayhead > stops[2]) {
+        /* ramp env when starting to play to smooth out */
+        env.gain.setValueAtTime(0, 0)
+        env.gain.linearRampToValueAtTime(1, currentTime + adjAmount)
+        adj = adjAmount
+      }
+      const gainAtEnd = lerp(stops[3], stops[2], soundLocalPlayhead + adj)
+      env.gain.setValueAtTime(gainAtEnd, currentTime + Math.max(times[2], times[4]) + adj)
       env.gain.linearRampToValueAtTime(0, currentTime + times[3])
     }
     

@@ -337,7 +337,7 @@ function LoopNodeView({
   }
 
   const handleOnPlayPause = () => {
-    session.playPause()
+    session.playPause(node.uid)
   }
 
   const handleOnStop = () => {

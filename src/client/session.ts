@@ -626,9 +626,14 @@ class Session extends Evt implements ITransport {
     this.transport.pause()
   }
 
-  playPause() {
+  playPause(nodeUid?: string) {
     if (this.transport.playState === 'stopped') {
-      this.playChain({})
+      if (!nodeUid) {
+        this.playChain({})
+      } else {
+        const { node } = this.findNode(nodeUid)
+        this.playChain({ endNode: node })
+      }
     } else {
       this.transport.playPause()
     }

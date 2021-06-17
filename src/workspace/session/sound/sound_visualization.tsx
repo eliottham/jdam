@@ -57,8 +57,8 @@ const renderFrames = ({
   if (!stops.length) {
     Array.prototype.push.apply(stops, sound.getDefaultStops())
   }
-  const stopInds = stops.map(stop => stop / 1000 * sampleRate)
-  const stopFacs = stops.map(stop => Math.min(1, stop / finalMs))
+  const stopInds = stops.map(stop => Math.floor(stop / 1000 * sampleRate))
+  const stopFacs = stops.map(stop => Math.min(1, (stop - (scheduled ? stops[1] : 0)) / finalMs))
 
   /* fill the center line */
   ctx.strokeStyle = '#bbb'
@@ -85,18 +85,20 @@ const renderFrames = ({
   /* determine zero based on stopInds[1] */
   let zero = 0
   if (!fixed) {
-    zero = Math.round(scheduled ? stopInds[1] : stopInds[0])
+    zero = scheduled ? stopInds[1] : stopInds[0]
   }
+
+  const endInd = scheduled ? stopInds[3] : frames.length - 1
 
   /* run through the maximums forwards */
   const widthOffset = zero * xStep 
-  for (let p = zero; p < frames.length; p++) {
+  for (let p = zero; p <= endInd; p++) {
     const max = frames[p]?.max ?? 0
     ctx.lineTo(Math.round(xStep * p) - widthOffset, Math.round(max * heightFactor + offset))
   }
 
   /* then the minimums backwards */
-  for (let p = frames.length - 1; p >= zero; p--) {
+  for (let p = endInd; p >= zero; p--) {
     const min = frames[p]?.min ?? 0
     ctx.lineTo(Math.round(xStep * p) - widthOffset, Math.round(min * heightFactor + offset))
   }
@@ -104,19 +106,18 @@ const renderFrames = ({
   ctx.closePath()
 
   if (gradient) {
-    const offset = scheduled ? stopFacs[1] : 0
     let grad = ctx.createLinearGradient(0, 0, width, 0)
-    if (!scheduled) { grad.addColorStop(stopFacs[0] - offset, `${primaryColorHex}00`) }
-    grad.addColorStop(stopFacs[1] - offset, primaryColorHex)
-    grad.addColorStop(stopFacs[2] - offset, primaryColorHex)
-    grad.addColorStop(stopFacs[3] - offset, `${primaryColorHex}00`)
+    if (!scheduled) { grad.addColorStop(stopFacs[0], `${primaryColorHex}00`) }
+    grad.addColorStop(stopFacs[1], primaryColorHex)
+    grad.addColorStop(stopFacs[2], primaryColorHex)
+    grad.addColorStop(stopFacs[3], `${primaryColorHex}00`)
     ctx.fillStyle = grad
 
     grad = ctx.createLinearGradient(0, 0, width, 0)
-    if (!scheduled) { grad.addColorStop(stopFacs[0] - offset, `${primaryColorHex}33`) }
-    grad.addColorStop(stopFacs[1] - offset, primaryColorHex)
-    grad.addColorStop(stopFacs[2] - offset, primaryColorHex)
-    grad.addColorStop(stopFacs[3] - offset, `${primaryColorHex}44`)
+    if (!scheduled) { grad.addColorStop(stopFacs[0], `${primaryColorHex}33`) }
+    grad.addColorStop(stopFacs[1], primaryColorHex)
+    grad.addColorStop(stopFacs[2], primaryColorHex)
+    grad.addColorStop(stopFacs[3], `${primaryColorHex}44`)
     ctx.strokeStyle = grad
   }
 
