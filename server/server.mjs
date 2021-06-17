@@ -5,13 +5,17 @@ import WS from 'express-ws'
 import WebSocket from 'ws'
 import SessionOps from './session_ops.mjs'
 import Mongo from 'mongodb'
-import fs, { promises as fsp } from 'fs'
 import path from 'path'
+import http from 'http'
+import { PassThrough } from 'stream'
+import mime from 'mime-types'
 const { MongoClient, ObjectID, GridFSBucket } = Mongo
 
 const PORT = 54049
 const MONGO_URL = 'mongodb://localhost:27017'
 const MONGO_DB_NAME = 'jdam'
+
+const FFMPEG_URL = 'http://localhost:48000'
 
 const mongoClient = new MongoClient(MONGO_URL, { useUnifiedTopology: true })
 let db
@@ -49,10 +53,6 @@ const authSessionMap = new Map()
  * account based on its ID value
  */
 const accountAuthMap = new Map()
-
-// app.get('/*', (req, res) => {
-//   res.sendFile(path.resolve('./public', 'main.js'))
-// })
 
 app.ws('/ws', ws => {
   ws.send('connected')
@@ -276,6 +276,14 @@ function refreshSession({ token, res }) {
     throw Error('Session not found')
   }
 
+  /*
+   * TODO: figure out why this hack is required -- something about 
+   * re-auth after a long time period doesn't also set an entry in the
+   * accountAuthMap correctly. This disables communication back to the
+   * client from the session
+   */
+  if (authSessionObj.id) { accountAuthMap.set(authSessionObj.id, token) }
+
   authSessionObj.expires = dateValue + EXPIRATION_THRESHOLD
   return dateValue
 }
@@ -351,14 +359,19 @@ app.post('/account', async (req, res) => {
 
 })
 
-app.post('/accounts/search', useAuth(async (req, res, auth) => {
-  res.status(200).json({ success: true, accounts: [] })
-}))
-
-app.post('/accounts/search/:searchQuery', useAuth(async (req, res, auth) => {
+app.post('/accounts/search', useAuth(async (req, res) => {
   if (!db) { throw new Error('Database not found') }
 
-  const searchQuery = req.params.searchQuery
+  let { query: searchQuery } = req.body
+
+  if (!searchQuery) {
+    res.status(200).json({ success: true, accounts: [] })
+    return 
+  }
+
+  /* sanitize input string -- it shouldn't actually be real regex */
+  searchQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
   const accounts = db.collection('accounts')
   let accountMatches = await accounts.find({
     $or: [
@@ -663,11 +676,22 @@ app.get('/unauth', useAuth((req, res, auth) => {
 }))
 
 function handleSocketResponse(mId, res, containerId) {
-  const { connectedAccounts = [] } = res
+  const { ownerAccount, connectedAccounts = [] } = res
   res.sessionId = containerId
+
+  let foundOwner = false
 
   for (const connectedAccount of connectedAccounts) {
     const token = accountAuthMap.get(connectedAccount)
+    const authSessionObj = authSessionMap.get(token)
+    if (authSessionObj?.client) {
+      authSessionObj.client.send(`jam:${mId}:${JSON.stringify(res)}`) 
+    }
+    if (connectedAccount === ownerAccount) { foundOwner = true }
+  }
+
+  if (!foundOwner) {
+    const token = accountAuthMap.get(ownerAccount)
     const authSessionObj = authSessionMap.get(token)
     if (authSessionObj?.client) {
       authSessionObj.client.send(`jam:${mId}:${JSON.stringify(res)}`) 
@@ -701,7 +725,8 @@ app.put('/session/create', useAuth(async (req, res, auth) => {
       sessionLength,
       bpm,
       measures,
-      pattern
+      pattern,
+      pending: true
     })
     res.status(200).json({ success: true, ...sessionInfo })
   } catch (err) {
@@ -764,9 +789,13 @@ app.post('/sessions/:sessionId/stream/upload', useAuth(async (req, res, auth) =>
     return
   }
 
+  req.on('error', err => {
+    res.status(500).json({ success: false, errors: [ err.message ] })
+  })
+
   /* Key-value pairs of header names and values. Header names are lower-cased. */
   const contentType = req.headers['content-type']
-  const fileType = contentType?.split(';')[0].split('/')[1]
+  const fileType = mime.extension(contentType)
   if (!fileType) {
     res.status(410).json({ success: false, errors: [ 'invalid file type supplied' ] })
     return
@@ -805,28 +834,54 @@ app.get('/sessions/:sessionId/stream/download/:fileId', useAuth(async (req, res)
     return
   }
 
+  const writeStream = new PassThrough()
+  writeStream.once('data', data => {
+    const params = JSON.parse(data)
+    if (!params) {
+      res.writeHead(500, 'no params returned').end()
+      return 
+    }
+
+    const { error, fileType } = params
+    if (error) {
+      res.writeHead(410, 'error in download').end()
+      return 
+    }
+
+    res.writeHead(200, {
+      'Content-Type': fileType
+    })
+
+    writeStream.pipe(res)
+  })
+
   sessionOps.downloadFile({
     sessionId: req.params.sessionId,
     fileId,
-    writeStream: res
+    writeStream
   })
 
 }))
 
-app.get('/metro/pings/:pingName', useAuth(async (req, res) => {
-  const pingName = req.params.pingName.replace(/[^\w-]/g, '')
-  try { 
-    const resolvedPath = path.resolve(`./session/${pingName}.raw`)
-    await fsp.stat(resolvedPath)
-    const readStream = fs.createReadStream(resolvedPath)
+app.post('/processor/*', (req, res) => {
+  const proxyReq = http.request(`${FFMPEG_URL}/${req.params[0]}`, {
+    headers: req.headers,
+    ...req
+  }, proxyRes => {
     res.writeHead(200, {
-      'Content-Type': 'application/pcm_s24le'
+      ...proxyRes.headers
     })
-    readStream.pipe(res)
-  } catch (err) { 
-    res.status(404).end()
-  }
-}))
+    proxyRes.pipe(res)
+  })
+  proxyReq.on('error', () => {
+    res.status(500)
+  })
+  req.pipe(proxyReq)
+})
+
+app.get('*', (req, res) => {
+  res.sendFile(path.resolve('./public', 'index.html'))
+})
 
 
 async function begin() {

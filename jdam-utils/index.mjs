@@ -26,7 +26,8 @@ function parse(data) {
     return [ chunk.slice(0, splitIndex).toString('utf8'), chunk.slice(splitIndex + 1).toString('utf8') ]
   }
 
-  for (let b = 0; b < data.length; b++) {
+  let b = 0
+  for (; b < data.length; b++) {
     const code = data[b]
     if (code === comma || code === semicolon) {
       const paramKeyValue = data.slice(lastIndex, b)

@@ -112,6 +112,8 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
             key={ child.uid } 
             node={ child }
             onSelect={ handleOnSelect }
+            session={ session }
+            transport={ session.transport }
           />
         })}
         { canAdd &&

@@ -9,6 +9,7 @@
   "author": "gheld",
   "license": "ISC",
   "dependencies": {
-    "jdam-utils": "file:../jdam-utils"
+    "jdam-utils": "file:../jdam-utils",
+    "mime-types": "file:../mime-types"
   }
 }

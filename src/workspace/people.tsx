@@ -1,6 +1,6 @@
 import JdamClient from '../client/jdam_client'
 import { useEffect, useState } from 'react'
-import { makeStyles } from '@material-ui/core/styles'
+import { makeStyles } from '@material-ui/styles'
 import SearchIcon from '@material-ui/icons/Search'
 import PersonAddIcon from '@material-ui/icons/PersonAdd'
 import PeopleIcon from '@material-ui/icons/People'
@@ -17,7 +17,7 @@ import {
 } from '@material-ui/core'
 
 
-import { Account, Friend } from '../client/account'
+import Account, { Friend } from '../client/account'
 
 const useStyles = makeStyles({
   people: {
@@ -55,37 +55,39 @@ const useStyles = makeStyles({
 })
 
 
-function People({
-  client
-}: { client: JdamClient }): JSX.Element {
+function People({ client }: { client: JdamClient }): JSX.Element {
+
   const classes = useStyles()
+
   const [ accounts, setAccounts ] = useState<Account[]>([])
-  const [ friends, setFriends ] = useState<Friend[]>(client.account?.friends.slice() || [])
+  const [ friends, setFriends ] = useState<Friend[]>(client.account.friends.slice() || [])
 
   useEffect(() => {
     const onSetAccounts = (dbAccounts: Account[]) => {
       setAccounts(dbAccounts)
     }
-    client.on('set-accounts', onSetAccounts)
+    client.on('search-accounts', onSetAccounts)
 
     const onAccountInfo = ({ account }: { account: Account }) => {
       setFriends(account.friends)
     }
+
     client.on('account-info', onAccountInfo)
 
     return () => {
-      client.un('set-accounts', onSetAccounts)
+      client.un('search-accounts', onSetAccounts)
       client.un('account-info', onAccountInfo)
     }
   }, [ client ])
 
-  const debounce = (fn: (...args: any[]) => any, delay = 500) => {
+  /* create a wrapped debounce function */
+  const debounce = (fn: (evt: React.ChangeEvent<HTMLInputElement>) => void, delay = 500) => {
     let timeoutId: number
-    return function(...args: any[]) {
 
+    return (evt: React.ChangeEvent<HTMLInputElement>) => {
       window.clearTimeout(timeoutId)
       timeoutId = window.setTimeout(() => {
-        fn(...args)
+        fn(evt)
       }, delay)
     }
   }
@@ -105,7 +107,7 @@ function People({
     }  
 
     const _generateFriendButton = (targetAccount: Account) => {
-      const friend = friends.find(f => f._id === targetAccount._id)
+      const friend = friends.find(f => f.id === targetAccount.id)
       if (friend) {
         if (friend.pending) {
           return (
@@ -138,7 +140,7 @@ function People({
     }
 
     return accounts.map(account => {
-      if (client.account?._id === account._id) { return }
+      if (client.account.id === account.id) { return }
 
       const extraProps = {} as { src?: string }
       if (account.avatarId) {

@@ -3,7 +3,7 @@ import AddIcon from '@material-ui/icons/Add'
 import GroupIcon from '@material-ui/icons/Group'
 
 import { BigAction, SlidingPageDialog, Form, FormSlider } from '../../comps/comps'
-import { FormFieldTemplate, FormFieldProps } from '../../comps/form_field'
+import { FormFieldTemplate } from '../../comps/form_field'
 import { SlidingPageDialogProps } from '../../comps/sliding_page_dialog'
 
 import JdamClient from '../../client/jdam_client'
@@ -181,6 +181,7 @@ function SessionDialog({
       onClose={ onClose }
       tabIndex={ tabIndex }
       setTabIndex={ setTabIndex } 
+      disableBackdropClose={ true }
       { ...props }
     >
       <>

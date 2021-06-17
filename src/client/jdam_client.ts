@@ -3,8 +3,9 @@ import Session from './session'
 import Settings from './settings'
 import Metro from './metro'
 
-export type AudioDeviceType = 'input' | 'output'
 import Account from './account'
+
+export type AudioDeviceType = 'input' | 'output'
 
 class ClientSettings extends Settings {
   inputs: MediaDeviceInfo[] = []
@@ -126,18 +127,13 @@ interface JdamClientParams {
 class JdamClient extends Evt {
   _mId = Math.ceil(Math.random() * Date.now())
   _pendingMessages: Map<number, (params: { prefix: string, mId: string, data: string }) => void> = new Map()
-  email = ''
-  nickname = ''
-  hash = ''
-  avatarId = ''
   authToken = ''
-  accountId = ''
   webSocket?: WebSocket
-  sessions: Map<string, Session> = new Map()
   activeSession = ''
   settings = new ClientSettings()
+  account = new Account({})
   metro = new Metro()
-  account?: Account
+  audioCtx = new AudioContext({ sampleRate: 48000 })
 
   constructor(params?: JdamClientParams) {
     super()
@@ -220,18 +216,38 @@ class JdamClient extends Evt {
           case 'jam':
             try {
               const rjson = JSON.parse(data)
-              const { sessionId, endSession, purgeSessions } = rjson
-              const session = this.sessions.get(sessionId)
+              const { sessionId, endSession, purgeSessions, start } = rjson
+
+              if (start) {
+                const {
+                  id: sessionId,
+                  title,
+                  description,
+                  accounts
+                } = start
+                const newSession = new Session({ 
+                  title,
+                  description,
+                  sessionId,
+                  accounts,
+                  client: this
+                })
+                this.account.sessions.set(sessionId, newSession)
+                this.fire('set-sessions', { sessions: this.getSessions() })
+                return
+              }
+
+              const session = this.account.sessions.get(sessionId)
               if (session) {
                 if (!endSession) {
                   session.handleResponse(rjson)
                   return
                 }
-                this.sessions.delete(sessionId)
+                this.account.sessions.delete(sessionId)
                 this.fire('delete-session', { sessionId, session })
                 this.fire('set-sessions', { sessions: this.getSessions() })
               } else if (purgeSessions) {
-                this.sessions.clear()
+                this.account.sessions.clear()
                 this.fire('purge-sessions', {})
                 this.fire('set-sessions', { sessions: this.getSessions() })
                 this.setActiveSession()
@@ -256,7 +272,7 @@ class JdamClient extends Evt {
     if (email && password) hash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))
 
     try {
-      const response = await fetch('account', {
+      const response = await fetch('/account', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -270,23 +286,25 @@ class JdamClient extends Evt {
     }
   }
 
-  async findAccounts(searchQuery: string) {
+  async findAccounts(query: string) {
     try {
-      const response = await fetch(`accounts/search/${searchQuery || ''}`, {
+      const response = await fetch('/accounts/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ query })
       })
       const responseJson = await response.json()
       const accounts = []
       if (responseJson.success) {
         for (const account of responseJson.accounts) {
           delete account.hash
+          account.id = account._id
           accounts.push(new Account(account))
         }
       }
-      this.fire('set-accounts', accounts)
+      this.fire('search-accounts', accounts)
     } catch (err) {
       /* do nothing */
     }
@@ -294,7 +312,7 @@ class JdamClient extends Evt {
 
   async getFriendRequests() {
     try {
-      const response = await fetch('accounts/friend/request', {
+      const response = await fetch('/accounts/friend/request', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
@@ -310,13 +328,13 @@ class JdamClient extends Evt {
   /* Send a friend request with the 'pending' flag set to true until the recipient confirms / denies */
   async sendFriendRequest(targetFriend: Account) {
     try {
-      await fetch('accounts/friend/request', {
+      await fetch('/accounts/friend/request', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          _id: targetFriend._id,
+          id: targetFriend.id,
           nickname: targetFriend.nickname,
           pending: true,
           requested: new Date()
@@ -330,13 +348,13 @@ class JdamClient extends Evt {
 
   async removeFriend(targetFriend: Account) {
     try {
-      await fetch('accounts/friend', {
+      await fetch('/accounts/friend', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          _id: targetFriend._id,
+          id: targetFriend.id,
           nickname: targetFriend.nickname
         })
       })
@@ -346,17 +364,34 @@ class JdamClient extends Evt {
     }
   }
 
-  async updateAccountSettings({ email, nickname, currentPassword, newPassword }: { email?: string, nickname?: string, currentPassword?: string, newPassword?: string }) {
+  async updateAccountSettings({ 
+    email,
+    nickname,
+    currentPassword,
+    newPassword 
+  }: { 
+    email?: string,
+    nickname?: string,
+    currentPassword?: string,
+    newPassword?: string 
+  }) {
     const encoder = new TextEncoder()
     let currentHash = ''
     let newHash = ''  
-    let hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${this.email}${currentPassword}`)))
-    if (this.email && currentPassword) currentHash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))    
+    let hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${this.account.email}${currentPassword}`)))
+
+    if (this.account.email && currentPassword) {
+      currentHash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))    
+    }
+
     hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${newPassword || currentPassword}`)))
-    if (email && (newPassword || currentPassword)) newHash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))
+
+    if (email && (newPassword || currentPassword)) {
+      newHash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))
+    }
     
     try {
-      const response = await fetch('account/settings', {
+      const response = await fetch('/account/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -371,17 +406,22 @@ class JdamClient extends Evt {
   }
 
   async accountInfo() {
-    if (!this.accountId) return {}
+    if (!this.account.id ) { return {} }
     try {
-      const response = await fetch('account', { method: 'GET'})
+      const response = await fetch('/account', { method: 'GET'})
       const responseJson = await response.json()
       const { success, account } = responseJson
       if (success) {
+        account.id = account._id
         this.account = new Account(account)
         if (account.sessions.length) {
           for (const session of account.sessions) {
             const { _id: sessionId, title, description, accounts } = session
-            this.sessions.set(sessionId, new Session({ 
+
+            /* don't overwrite existing sessions */
+            if (this.account.sessions.has(sessionId)) { continue }
+
+            this.account.sessions.set(sessionId, new Session({ 
               title,
               description,
               sessionId,
@@ -402,7 +442,7 @@ class JdamClient extends Evt {
 
   async uploadAvatar(file: File) {
     if (!this.account) { return }
-    const response = await fetch('account/avatar', { 
+    const response = await fetch('/account/avatar', { 
       method: 'POST',
       headers: {
         'Content-Type': file.type
@@ -420,13 +460,15 @@ class JdamClient extends Evt {
   async logon(email?: string, password?: string, suppressErrors?: boolean) {
 
     const encoder = new TextEncoder()
-
     let hash = ''
     const hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${password}`)))
-    if (email && password) { hash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), '')) }
+
+    if (email && password) { 
+      hash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), '')) 
+    }
 
     try {
-      const response = await fetch('auth', {
+      const response = await fetch('/auth', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -435,7 +477,7 @@ class JdamClient extends Evt {
       })
       const responseJson = await response.json()
       this.authToken = responseJson.token
-      this.accountId = responseJson.id
+      this.account.id = responseJson.id
       if (suppressErrors) delete responseJson.errors
       this.fire('logon', responseJson)
       if (responseJson.success) {
@@ -449,11 +491,11 @@ class JdamClient extends Evt {
   }
 
   bounce() {
-    fetch('bounce', { method: 'GET' })
+    fetch('/bounce', { method: 'GET' })
   }
 
   async logoff() {
-    const response = await fetch('unauth', {
+    const response = await fetch('/unauth', {
       method: 'GET'
     })
     const responseJson = await response.json()
@@ -476,7 +518,7 @@ class JdamClient extends Evt {
     pattern?: number[]
   }) {
     try {
-      const response = await fetch('session/create', {
+      const response = await fetch('/session/create', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -496,16 +538,7 @@ class JdamClient extends Evt {
         this.fire('create-session', { success, errors })
         return
       }
-      const newSession = new Session({ 
-        title,
-        description,
-        sessionLength,
-        sessionId,
-        client: this
-      })
-      this.sessions.set(sessionId, newSession)
-      this.fire('create-session', { sessionId, newSession })
-      this.fire('set-sessions', { sessions: this.getSessions() })
+      this.fire('create-session', { sessionId })
       this.setActiveSession(sessionId)
     } catch (err) {
       /* do nothing */
@@ -514,7 +547,7 @@ class JdamClient extends Evt {
 
   async joinSession({ sessionId }: { sessionId: string }) {
     try {
-      const response = await fetch('session/join', {
+      const response = await fetch('/session/join', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -522,7 +555,7 @@ class JdamClient extends Evt {
         body: JSON.stringify({ sessionId })
       })
       const responseJson = await response.json()
-      const { success, errors = [], title, description } = responseJson
+      const { success, errors = [], title, description, accounts } = responseJson
       if (!success) {
         this.fire('create-session', { success, errors: [ 'Could not join session' ].concat(errors) })
         return
@@ -531,9 +564,10 @@ class JdamClient extends Evt {
         title,
         description,
         sessionId,
+        accounts,
         client: this
       })
-      this.sessions.set(sessionId, newSession)
+      this.account.sessions.set(sessionId, newSession)
       this.fire('create-session', { sessionId, newSession })
       this.fire('set-sessions', { sessions: this.getSessions() })
     } catch (err) {
@@ -542,7 +576,7 @@ class JdamClient extends Evt {
   }
 
   getSessions(): Session[] {
-    return Array.from(this.sessions.values())
+    return Array.from(this.account.sessions.values())
   }
 
   setActiveSession(sessionId = '') {
@@ -552,17 +586,17 @@ class JdamClient extends Evt {
       return
     }
 
-    const session = this.sessions.get(sessionId)
+    const session = this.account.sessions.get(sessionId)
     if (!session) return
 
     this.activeSession = sessionId
     this.fire('active-session', { sessionId, session })
 
-    session.setNodes()
+    session.getNodes()
   }
 
   getActiveSession() {
-    return this.sessions.get(this.activeSession)
+    return this.account.sessions.get(this.activeSession)
   }
 
 }

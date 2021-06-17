@@ -5,6 +5,7 @@ import { Writable } from 'stream'
 import { generateRandomBitString } from 'jdam-utils'
 import { stream } from './wave.mjs'
 import path from 'path'
+import mime from 'mime-types'
 
 const PORT = 48000
 
@@ -19,6 +20,8 @@ function peaks(params) {
    * sampleRate is independent of the conversion rate
    */
   const audioRate = 6000
+  const sampleStep = 1000 / audioRate
+
   const {
     req,
     res,
@@ -29,6 +32,10 @@ function peaks(params) {
 
   const sampleRate = params.sampleRate || 100
 
+  let globalMax = -Number.MAX_VALUE
+  let globalMin = Number.MAX_VALUE
+
+  let ms = 0
 
   const frames = []
   const frameSize = Math.floor(audioRate / sampleRate)
@@ -42,7 +49,10 @@ function peaks(params) {
       const signedValue = value - 128
       min = Math.min(min, signedValue)
       max = Math.max(max, signedValue)
+      ms += sampleStep
     }
+    globalMax = Math.max(globalMax, max)
+    globalMin = Math.min(globalMin, min)
     return { min, max }
   }
 
@@ -57,8 +67,13 @@ function peaks(params) {
         frames.push(minmax(currentFrame))
       }
       for (; currentSample < chunk.length; currentSample += frameSize) {
-        chunk.copy(currentFrame, 0, currentSample, Math.min(currentSample + frameSize, chunk.length))
-        frames.push(minmax(currentFrame))
+        const start = currentSample
+        const end = Math.min(currentSample + frameSize, chunk.length)
+        chunk.copy(currentFrame, 0, start, end)
+        if (end - start === frameSize) {
+          /* only push if the entire frame was copied */
+          frames.push(minmax(currentFrame))
+        }
       }
       /* diff to figure out the overrun */
       currentSample = currentSample - chunk.length
@@ -74,10 +89,19 @@ function peaks(params) {
       })
       res.end(JSON.stringify({
         success: true,
+        audioRate,
+        sampleRate,
+        ms,
+        global: {
+          min: globalMin,
+          max: globalMax
+        },
         frames
       }))
     } catch (err) {
-      res.writeHead(404, 'there was a massive error')
+      res.writeHead(404, 'there was a massive error', {
+        'Content-Type': 'application/json'
+      })
       res.end(JSON.stringify({
         success: false,
         errors: [ 'there was a massive error', err.message ]
@@ -85,16 +109,45 @@ function peaks(params) {
     }
   })
 
-  stream({
-    inputStream: req,
-    inputFormat: fileType,
-    channels: 1,
-    sampleRate: audioRate, /* {audioRate} samples per second */
-    ...!!start && { start },
-    ...!!end && { end },
-    format: 'u8', /* unsigned pcm raw */
-    outputStream: processor
+  processor.on('error', err => {
+    res.writeHead(404, 'there was a massive error', {
+      'Content-Type': 'application/json'
+    })
+    res.end(JSON.stringify({
+      success: false,
+      errors: [ 'there was a massive error', err.message ]
+    }))
   })
+
+  /* start and end are in ms */
+
+  const tempFilePath = path.resolve(`./temp/${generateRandomBitString(24, 'hex')}.${fileType}`)
+  const writeStream = fs.createWriteStream(tempFilePath)
+  req.pipe(writeStream)
+
+  writeStream.on('close', async () => {
+    try {
+      res.writeHead(200, 'good to go', {
+        'Content-Type': 'audio/flac'
+      })
+
+      await stream({
+        inputFile: tempFilePath,
+        channels: 1,
+        sampleRate: audioRate, /* {audioRate} samples per second */
+        ...!!start && { start },
+        ...!!end && { end },
+        format: 'u8', /* unsigned pcm raw */
+        outputStream: processor
+      })
+
+      await fsp.rm(tempFilePath)
+    } catch (err) {
+      /* I guess it's too late to change the contentType */
+      console.log(err) 
+    }
+  })
+
 
 }
 
@@ -131,6 +184,48 @@ function trim(params) {
 
 }
 
+async function clicks(params) {
+  const {
+    req,
+    res,
+    type,
+    name
+  } = params
+
+  const fileName = `${name}_${type}.raw`
+  const resolvedPath = path.resolve(`./clicks/${fileName}.raw`)
+
+  req.on('error', err => {
+    res.writeHead(500, 'request error', {
+      'Content-Type': 'application/json'
+    })
+    res.end(JSON.stringify({
+      success: false,
+      errors: [ 'request error', err.message ]
+    }))
+  })
+
+  try {
+    await fsp.access(resolvedPath)
+    const readStream = fs.createReadStream(resolvedPath)
+
+    res.writeHead(200, 'good to go', {
+      'Content-Type': 'application/pcm_s24le'
+    })
+
+    readStream.pipe(res)
+  } catch (err) {
+    res.writeHead(404, 'there was a massive error', {
+      'Content-Type': 'application/json'
+    })
+    res.end(JSON.stringify({
+      success: false,
+      errors: [ 'there was a massive error', err.message ]
+    }))
+  }
+
+}
+
 const streamingServer = http.createServer((req, res) => {
   const parsedUrl = new URL(req.url, `http://localhost:${PORT}/`) 
   const method = req.method
@@ -139,7 +234,7 @@ const streamingServer = http.createServer((req, res) => {
   const searchParams = parsedUrl.searchParams
 
   const contentType = req.headers['content-type']
-  const fileType = contentType?.split(';')[0].split('/')[1]
+  const fileType = mime.extension(contentType)
   
   if (method === 'POST') {
     if (pathname === '/peaks') {
@@ -159,6 +254,13 @@ const streamingServer = http.createServer((req, res) => {
         end: searchParams.get('end')
       })
       return
+    } else if (pathname.startsWith('/clicks')) {
+      clicks({
+        req,
+        res,
+        name: searchParams.get('name'),
+        type: searchParams.get('type')
+      })
     }
   }
 

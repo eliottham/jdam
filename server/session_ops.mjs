@@ -25,6 +25,46 @@ const pendingSessions = new Map()
 
 const separator = ':'.charCodeAt()
 
+async function onSessionDisconnect({
+  db,
+  sessionId,
+  responseHandler
+}) {
+  sessionMap.delete(sessionId)
+  console.log(`closed ${sessionId}`)
+
+  /* get accounts with a reference to the sessionId */
+  const accounts = db.collection('accounts')
+
+  /* 
+   * also have to update all accounts to pull this container
+   * from their sessions list
+   */
+
+  const cursor = accounts.find(
+    { sessions: sessionId }
+  )
+  
+  const affectedAccounts = []
+  await cursor.forEach(account => {
+    affectedAccounts.push(account._id.toString())
+  })
+
+  await accounts.updateMany(
+    { sessions: sessionId },
+    { '$pull': { sessions: sessionId }}
+  )
+
+  const res = {
+    res: {
+      connectedAccounts: affectedAccounts,
+      closeSession: true
+    }
+  }
+  responseHandler('-1', res, sessionId) 
+
+}
+
 const sessionListener = net.createServer(socket => {
   socket.once('data', data => {
     try {
@@ -33,41 +73,52 @@ const sessionListener = net.createServer(socket => {
       socket.end()
 
       if (!pendingSession) { return }
-      const { accountId, ip, rh } = pendingSession
+      const { accountId, ip, responseHandler } = pendingSession
       pendingSessions.delete(sessionId)
 
       const client = net.createConnection({ host: ip, port: 25052 }, () => { 
-        client.write('-1:' + JSON.stringify({ req : { addAccount: accountId }}), () =>{
-          client.on('data', data => {
-            let splitIndex = -1
-            for (let a = 0; a < data.length; a++) {
-              const code = data[a]
-              if (code === separator) {
-                splitIndex = a
-                break
-              }
+
+        client.on('data', data => {
+          let splitIndex = -1
+          for (let a = 0; a < data.length; a++) {
+            const code = data[a]
+            if (code === separator) {
+              splitIndex = a
+              break
             }
-            const mId = data.slice(0, splitIndex) 
-            try {
-              const json = JSON.parse(data.slice(splitIndex + 1))
-              const { res } = json
-              if (res) { rh(mId, res, sessionId) }
-            } catch (err) {
-              console.dir(err)
-            }
-          })
-          client.on('end', () => {
-            /* TODO: resolve duplicate code */
-            try {
-              sessionMap.delete(sessionId)
-            } catch (err) {
-              console.dir(err)
-            }
-          })
-          client.on('error', () => { 
-            sessionMap.delete(sessionId)
-          })
+          }
+          const mId = data.slice(0, splitIndex) 
+          try {
+            const json = JSON.parse(data.slice(splitIndex + 1))
+            const { res } = json
+
+            /* set owner account for reference later */
+            res.ownerAccount = accountId
+
+            /* response handler */
+            if (res) { responseHandler(mId, res, sessionId) }
+          } catch (err) {
+            console.dir(err)
+          }
         })
+        client.on('close', () => {
+          /* TODO: resolve duplicate code */
+          try {
+            onSessionDisconnect({
+              db: pendingSession.db,
+              sessionId,
+              responseHandler: responseHandler
+            })
+          } catch (err) {
+            console.dir(err)
+          }
+        })
+        client.on('error', () => { 
+          sessionMap.delete(sessionId)
+        })
+
+        /* send the pending session a request */
+        client.write('-1:' + JSON.stringify({ req : { addAccount: accountId }}))
         sessionMap.set(sessionId, client)
 
       })
@@ -111,7 +162,7 @@ class SessionOps {
      *
      * it should also be sanitized before even leaving the browser, but just be sure
      */
-    if (!this.db) { throw new Error('Database not found') }
+    if (!this.db) { throw Error('Database not found') }
 
     title = title.replace(/[^\w -]/g, '')
     description = description.replace(/[^\w -]/g, '')
@@ -192,8 +243,6 @@ class SessionOps {
       { '$addToSet': { sessions: containerId }}
     )
 
-    /* TODO: create a session record in the db for this session */
-
     const sessions = this.db.collection('sessions')
     await sessions.insertOne(
       {
@@ -203,11 +252,17 @@ class SessionOps {
         start: Date.now(),
         length: sessionLength * 60 * 1000, /* I am 100% going to regret/forget making this ms */
         ip,
-        accounts: [ ObjectID(accountId) ]
+        accounts: [ ObjectID(accountId) ],
+        ownerAccount: ObjectID(accountId)
       }
     )
 
-    pendingSessions.set(containerId, { accountId, ip, rh: this.responseHandler })
+    pendingSessions.set(containerId, { accountId, db: this.db, ip, responseHandler: this.responseHandler })
+
+    /* attempt to remove after 10 seconds always. This may be a noop */
+    setTimeout(() => {
+      pendingSessions.delete(containerId)
+    }, 10000)
 
     return { sessionId: containerId, title, description, length: sessionLength }
   }
@@ -227,7 +282,7 @@ class SessionOps {
   /* find session(s) by name, accountId, or both */
   async findSessions({ name, accountId }) {
 
-    if (!this.db) { throw new Error('Database not found') }
+    if (!this.db) { throw Error('Database not found') }
 
     const sessions = this.db.collection('sessions')
     
@@ -256,7 +311,7 @@ class SessionOps {
     sessionMap.clear()
   }
 
-  async reconnect() {
+  reconnect() {
 
     /* 
      * get sessions from the mongodb
@@ -266,14 +321,14 @@ class SessionOps {
      * that may also be infeasible
      */
 
-    if (!this.db) { throw new Error('Database not found') }
+    if (!this.db) { throw Error('Database not found') }
 
     const sessions = this.db.collection('sessions')
     const accounts = this.db.collection('accounts')
-    const cursor = await sessions.find()
+    const cursor = sessions.find()
 
-    await cursor.forEach(session => {
-      const { _id: sessionId, ip } = session
+    cursor.forEach(session => {
+      const { _id: sessionId, ip, ownerAccount } = session
       const client = net.createConnection({ host: ip, port: 25052 })
       client.on('data', data => {
         let splitIndex = -1
@@ -288,15 +343,23 @@ class SessionOps {
         try {
           const json = JSON.parse(data.slice(splitIndex + 1))
           const { res } = json
+
+          /* set owner account for reference later */
+          res.ownerAccount = ownerAccount.toString()
+
           if (res) { this.responseHandler(mId, res, sessionId) }
         } catch (err) {
           console.dir(err)
         }
       })
-      client.on('end', () => {
+      client.on('close', () => {
         /* TODO: resolve duplicate code */
         try {
-          sessionMap.delete(sessionId)
+          onSessionDisconnect({
+            db: this.db,
+            sessionId,
+            responseHandler: this.responseHandler
+          })
         } catch (err) {
           console.dir(err)
         }
@@ -323,20 +386,35 @@ class SessionOps {
 
   }
 
-  async uploadFile({ sessionId, fileId, fileType, length, readStream, nodeUid }) {
+  async uploadFile({ sessionId, fileId, fileType, length, readStream }) {
     const sessions = this.db.collection('sessions')
     const session = await sessions.findOne({ _id: sessionId })
     if (!session) { throw Error('Session not found for sessionId') }
 
     const { ip } = session
-    const client = net.createConnection({ host: ip, port: 25053 })
-    client.write(`action=upload,fileType=${fileType},fileId=${fileId},length=${length},nodeUid=${nodeUid};`)
-    readStream.pipe(client)
     return new Promise((resolve, reject) => {
-      client.on('error', err => {
-        reject(err) 
+
+      /* 25053 is the port for file streaming */
+      const client = net.createConnection({ host: ip, port: 25053 }, () => {
+        client.write(`action=upload,fileType=${fileType},fileId=${fileId},length=${length};`)
+        client.once('data', data => {
+          const dataParams = paramParse(data)
+          if (!dataParams) { 
+            reject(Error('no data returned')) 
+            return
+          }
+
+          const { error } = dataParams
+          if (error) {
+            reject(Error(error)) 
+            return
+          }
+
+          readStream.pipe(client)
+        })
       })
-      client.on('end', () => {
+      client.on('error', reject)
+      client.on('close', () => {
         resolve(fileId) 
       })
     })
@@ -348,27 +426,23 @@ class SessionOps {
     if (!session) { throw Error('Session not found for sessionId') }
 
     const { ip } = session
-    const client = net.createConnection({ host: ip, port: 25053 })
-    client.write(`action=download,fileId=${fileId};`)
+    /* 25053 is the port for file streaming */
+    return new Promise((resolve, reject) => {
+      const client = net.createConnection({ host: ip, port: 25053 }, () => {
+        client.write(`action=download,fileId=${fileId};`)
 
-    client.once('data', data => {
-      const dataParams = paramParse(data)
+        client.once('data', data => {
+          const dataParams = paramParse(data)
 
-      const { fileType, error } = dataParams
-
-      if (error) {
-        writeStream.writeHead(404, error).end()
-        return
-      }
-
-      writeStream.writeHead(200, {
-        'Content-Type': `audio/${fileType}`
+          writeStream.write(JSON.stringify(dataParams), () => {
+            client.pipe(writeStream)
+          })
+        })
+        client.on('error', reject)
+        client.on('close', resolve)
       })
-      client.pipe(writeStream)
     })
-
   }
-
 }
 
 sessionListener.listen(PORT, () => {

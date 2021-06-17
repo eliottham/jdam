@@ -11,14 +11,18 @@ import { Form, Icon, PopupErrors } from './comps/comps'
 import { FormFieldTemplate } from './comps/form_field'
 import Workspace from './workspace/workspace'
 
-import { createMuiTheme } from '@material-ui/core/styles'
+import { createTheme } from '@material-ui/core/styles'
 import { makeStyles } from '@material-ui/styles'
 import Validation from './client/validation'
 
-const theme = createMuiTheme({
+const primaryColorHex = '#e37922'
+
+export { primaryColorHex }
+
+const theme = createTheme({
   palette: {
     primary: {
-      main: '#e37922',
+      main: primaryColorHex,
       contrastText: '#fff'
     }
   }
@@ -169,7 +173,7 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
     >
       <div className="splash flex-center" style={ { flexDirection: "column", color: "white" } }>
         <div style={ { fontSize: "2rem", marginBottom: "24px" } }>JDAM</div>
-        <Icon url="assets/icons_proc/jdam.svg#jdam" className="white"/>
+        <Icon url="/assets/icons_proc/jdam.svg#jdam" className="white"/>
         <div style={ { fontSize: "1.2rem", marginTop: "24px" } }>EXPLOSIVE JAMS!</div>
       </div>
       <div className="content-wrapper">

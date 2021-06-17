@@ -26,7 +26,7 @@ module.exports = {
     rules: [ {
       test: /\.(ts|js)x?$/,
       include: [ path.resolve(__dirname, 'src') ],
-      use: {
+      use: [ {
         loader: "babel-loader",
         options: {
           presets: [
@@ -35,7 +35,7 @@ module.exports = {
             "@babel/preset-typescript"
           ]
         }
-      }
+      } ]
     }, {
       test: /\.css$/i,
       use: [ {
@@ -54,6 +54,7 @@ module.exports = {
     host: 'localhost',
     contentBase: './public',
     writeToDisk: true,
-    port: 4001
+    port: 4001,
+    clientLogLevel: 'error'
   }
 }

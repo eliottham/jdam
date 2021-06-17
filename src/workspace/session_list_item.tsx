@@ -12,6 +12,7 @@ const activeIndicatorWidth = 4
 const useStyles = makeStyles({
   root: {
     '&.MuiListItem-root': {
+      color: 'var(--black)',
       display: 'block',
       position: 'relative',
       marginTop: 1,

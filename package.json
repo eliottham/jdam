@@ -10,11 +10,11 @@
     "build": "webpack --mode production"
   },
   "dependencies": {
-    "@emotion/react": "^11.1.5",
-    "@emotion/styled": "^11.1.5",
+    "@emotion/react": "^11.4.0",
+    "@emotion/styled": "^11.3.0",
     "@material-ui/core": "^5.0.0-alpha.35",
     "@material-ui/icons": "^5.0.0-alpha.35",
-    "@material-ui/styles": "*",
+    "@material-ui/styles": "^5.0.0-alpha.35",
     "@types/react-router": "^5.1.14",
     "@types/react-router-dom": "^5.1.7",
     "react": "^17.0.2",

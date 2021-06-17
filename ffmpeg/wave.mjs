@@ -54,11 +54,12 @@ function waveHeader({ length, channels = CHANNELS }) {
 
 }
 
-async function metronome(
+async function metronome({
   bpm = 120,
   /* division = 4, */
-  pattern = [ 2, 1, 1, 1 ] /* 2 for high ping, 1 for low ping, 0 for off */
-) {
+  pattern = [ 2, 1, 1, 1 ], /* 2 for high ping, 1 for low ping, 0 for off */
+  measures = 1
+}) {
 
   /* 
    * calculate the length of the click track data segment, then add 44 to it
@@ -77,19 +78,19 @@ async function metronome(
   const writeStream = fs.createWriteStream(rawFile)
 
   // const length = (beats * beats * 60) / (bpm * division)
-  const length = (60 / bpm * beats)
+  const length = (60 / bpm) * beats
   const sampleSize = BYTE_DEPTH /* we are forcing mono, so omit multiplying by channel count */
   const offsetStartToStart = (length / beats) * SAMPLE_RATE * sampleSize /* bytes between the starts of each ping */
 
   const [ highPing, lowPing ] = await Promise.all([ fsp.readFile('./click_high.raw'), fsp.readFile('./click_low.raw') ])
 
   /* start writing pcm data */
-  const totalBytes = (length * SAMPLE_RATE * sampleSize)
+  const totalBytes = (length * measures * SAMPLE_RATE * sampleSize)
   const frameSize = 8192
   const frame = Buffer.alloc(frameSize)
   
   const stops = [ 0 ]
-  for (let b = 1; b < beats; b++) {
+  for (let b = 1; b < beats * measures; b++) {
     const currentStartOffset = offsetStartToStart * b
     /* 
      * this adjustment is required in order to align the samples in a way that
@@ -104,11 +105,11 @@ async function metronome(
   stops.push(totalBytes)
 
   let patternIndex = 0
-  for (let b = 0; b < beats; b++) {
-    const currentStop = stops[ b ]
-    const nextStop = stops[ b + 1 ]
-    const currentPattern = pattern[patternIndex]
-    patternIndex = Math.min(patternIndex + 1, pattern.length - 1) 
+  for (let b = 0; b < beats * measures; b++) {
+    const currentStop = stops[b]
+    const nextStop = stops[b + 1]
+    const currentPattern = pattern[patternIndex % beats]
+    patternIndex++
     let bytesLeft = nextStop - currentStop
     let currentByte = 0
 
@@ -212,6 +213,9 @@ function stream({
     })
 
     if (inputStream) {
+      inputStream.on('error', err => {
+        reject(err)
+      })
       inputStream.pipe(proc.stdin)
     }
 

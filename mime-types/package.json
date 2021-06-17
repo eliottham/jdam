@@ -1,0 +1,14 @@
+{
+  "name": "mime-types",
+  "version": "1.0.0",
+  "description": "extend mime-types with custom types",
+  "main": "index.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "mime-types": "^2.1.31"
+  }
+}

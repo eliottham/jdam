@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 
 import LoopNodeLane from './loop_node_lane'
-import { SoundEditorDialog } from './sound_editor'
+import { SoundEditorDialog } from './sound/sound_editor'
 import { PopupErrors } from '../../comps/comps'
 
-import Session, { Sound } from '../../client/session'
+import Session from '../../client/session'
+import Sound from '../../client/sound'
 import LoopNode from '../../client/loop_node'
 
 import { makeStyles } from '@material-ui/styles'
@@ -12,7 +13,9 @@ import { makeStyles } from '@material-ui/styles'
 const useStyles = makeStyles({
   root: {
     height: '100%',
-    width: '100%'
+    width: '100%',
+    overflowX: 'hidden',
+    overflowY: 'scroll'
   },
   popupLayer: {
     position: 'absolute',
@@ -24,14 +27,15 @@ const useStyles = makeStyles({
 
 interface SessionViewProps {
   session: Session
+  setActive?: boolean
 }
 
-function SessionView({ session }: SessionViewProps): JSX.Element {
+function SessionView({ session, setActive = false }: SessionViewProps): JSX.Element {
 
   const [ errors, setErrors ] = useState<string[]>([])
   const [ showErrors, setShowErrors ] = useState(false)
 
-  const [ editingSound, setEditingSound ] = useState(false)
+  const [ editingSound, setEditingSound ] = useState<Sound>()
 
   const classes = useStyles()
 
@@ -52,24 +56,32 @@ function SessionView({ session }: SessionViewProps): JSX.Element {
     }
 
     const onEditSound = ({ sound, node }: { sound: Sound, node?: LoopNode }) => {
-      setEditingSound(true)
+      setEditingSound(sound)
     }
 
     const onCancelEditSound = () => {
-      setEditingSound(false)
+      setEditingSound(undefined)
     }
 
     session.on('errors', onError)
     session.on('edit-sound', onEditSound)
     session.on('cancel-edit-sound', onCancelEditSound)
+    session.on('save-edit-sound', onCancelEditSound)
 
     return () => {
       session.un('errors', onError)
       session.un('edit-sound', onEditSound)
       session.un('cancel-edit-sound', onCancelEditSound)
+      session.un('save-edit-sound', onCancelEditSound)
       window.clearTimeout(timeoutIndex)
     }
   }, [ session ])
+
+  useEffect(() => {
+    if (setActive) {
+      session.setActive()
+    }
+  }, [ session, setActive ])
 
   const handleOnCloseSoundEditor = () => {
     session.cancelEditSound()
@@ -84,9 +96,10 @@ function SessionView({ session }: SessionViewProps): JSX.Element {
         session={ session } 
       />
       <SoundEditorDialog
-        open={ editingSound }
+        open={ !!editingSound }
         onClose={ handleOnCloseSoundEditor }
         session={ session }
+        sound={ editingSound }
       />
       <div className={ classes.popupLayer }>
         <PopupErrors

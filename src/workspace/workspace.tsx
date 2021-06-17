@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import {
   Drawer,
   Divider,
@@ -73,7 +73,7 @@ function Workspace(props: { client: JdamClient }) {
       setCreatingSession(false)
     }
 
-    const onSetSessions = ({ sessions }: { sessions: Session[] }) => {
+    const onSetSessions = ({ sessions = [] }: { sessions: Session[] }) => {
       setSessions(sessions)
     }
 
@@ -154,7 +154,10 @@ function Workspace(props: { client: JdamClient }) {
           <List>
             <ProfileListItem client={ props.client }/> 
             <Divider/>
-            <Link to="/people" style={ { textDecoration: 'none' } }>
+            <Link 
+              to="/people" 
+              style={ { textDecoration: 'none' } }
+            >
               <ListItem button>
                 <ListItemIcon>
                   <PeopleIcon />
@@ -164,11 +167,18 @@ function Workspace(props: { client: JdamClient }) {
             </Link>
             {
               sessions.map(session => {
-                return <SessionListItem 
-                  active={ session === activeSession } 
-                  key={ `session-${session.sessionId}` } 
-                  session={ session }
-                />
+                return (
+                  <Link 
+                    to={ `/sessions/${session.sessionId}` }
+                    key={ `session-${session.sessionId}` }
+                    style={ { textDecoration: 'none' } }
+                  >
+                    <SessionListItem 
+                      active={ session === activeSession } 
+                      session={ session }
+                    />
+                  </Link>
+                )
               })
             }
           </List>
@@ -186,19 +196,25 @@ function Workspace(props: { client: JdamClient }) {
         </Drawer>
         {/* <div className="content">  */}
         <Switch>
-          <Route exact={ true } path="/">                  
-            { !!activeSession && 
-          <SessionView
-            session={ activeSession }
-          />
-            }
-            <DeviceManager client={ props.client } />
+          <Route exact={ true } path="/sessions/:sessionId"
+            render={ ({ match }) => { 
+              const activeSession = sessions.find(session => match.params.sessionId === session.sessionId) 
+              if (!activeSession) { return <Fragment/> }
+              return (
+                <SessionView
+                  session={ activeSession }
+                  setActive={ true }
+                />
+              ) 
+            } }
+          >
           </Route> 
           <Route path="/people" render={ () => {
             return <People client={ props.client } />
           } }>              
           </Route>
         </Switch>   
+        <DeviceManager client={ props.client } />
       </div>
     </Router>
   )

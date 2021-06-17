@@ -1,13 +1,13 @@
 import JdamClient from '../client/jdam_client'
-import { BaseSyntheticEvent, useEffect, useState } from 'react'
+import { BaseSyntheticEvent, useEffect, useState, useRef } from 'react'
 import { FormFieldTemplate, FormFieldProps } from '../comps/form_field'
-import { makeStyles } from '@material-ui/core/styles'
+import { makeStyles } from '@material-ui/styles'
 import { Avatar, Button, Dialog, DialogProps } from '@material-ui/core'
 import CloseIcon from '@material-ui/icons/Close'
 import Form from '../comps/form'
 import Validation from '../client/validation'
 
-const useStyles = makeStyles(theme => ({
+const useStyles = makeStyles({
   root: {
     '& .MuiPaper-root': {
       padding: '1em'
@@ -21,17 +21,16 @@ const useStyles = makeStyles(theme => ({
     marginBottom: '1em',
     borderRadius: 4,
     width: '100%',
-    height: '15em',
-    gridColumn: '1/span 2',
+    padding: '1.5em 0',
+    gridColumn: '1 / span 2',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-around',
     '& .avatar': {
-      width: theme.spacing(20),
-      height: theme.spacing(20),
-      marginRight: '5em'
+      width: 250,
+      height: 250
     },
     '& .MuiButton-root': {
-      width: '15em'
+      width: 200
     }
   },
   header: {
@@ -50,7 +49,7 @@ const useStyles = makeStyles(theme => ({
     color: 'var(--primary)',
     cursor: 'pointer'
   }
-}))
+})
 
 interface UploadAvatarFormFieldProps extends FormFieldProps<File> {
   avatarId?: string
@@ -59,6 +58,7 @@ interface UploadAvatarFormFieldProps extends FormFieldProps<File> {
 function UploadAvatar({ avatarId, onChange }: UploadAvatarFormFieldProps): JSX.Element {
   
   const classes = useStyles()
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFileChange = (event: BaseSyntheticEvent) => {
     const file = event.target.files[0]
@@ -70,21 +70,27 @@ function UploadAvatar({ avatarId, onChange }: UploadAvatarFormFieldProps): JSX.E
     extraProps.src = `avatars/${avatarId}` 
   }
 
+  const onClickUpload = () => {
+    inputRef.current?.click()
+  }
+
   return (
     <div className={ classes.uploadAvatar }>
       <Avatar className="avatar" { ...extraProps } />
       <input 
-        id="upload-avatar"
+        ref={ inputRef }
         type="file" 
         accept="image/*"
         style={ { display: 'none' } }
         onChange={ handleFileChange }
       />
-      <label htmlFor="upload-avatar">
-        <Button variant="contained" component="span">
-          Upload Avatar
-        </Button>
-      </label>
+      <Button 
+        onClick={ onClickUpload }
+        variant="contained" 
+        component="span"
+      >
+        Upload Avatar
+      </Button>
     </div>
   )
 }

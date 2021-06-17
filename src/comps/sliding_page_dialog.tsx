@@ -2,7 +2,7 @@ import {
   DialogProps
 } from '@material-ui/core'
 import ArrowBackIcon from '@material-ui/icons/ArrowBack'
-import CloseableDialog from './closeable_dialog'
+import CloseableDialog, { CloseableDialogProps } from './closeable_dialog'
 
 import { makeStyles } from '@material-ui/styles'
 
@@ -57,7 +57,7 @@ function SlidingPageDialog({
   children,
   height = 0,
   ...props 
-}: SlidingPageDialogProps & DialogProps): JSX.Element {
+}: SlidingPageDialogProps & CloseableDialogProps): JSX.Element {
 
   const classes = useStyles()
 
@@ -68,17 +68,29 @@ function SlidingPageDialog({
       maxWidth={ false }
       { ...props }
     >
-      <div className={ `${classes.slidingPageDialog} flex-center` } style={ { height } }>
+      <div 
+        className={ `${classes.slidingPageDialog} flex-center` } 
+        style={ { height } }
+      >
         { tabIndex !== 0 &&
-          <div className="back-button flex-center" onClick={ () => { setTabIndex(0) } }>
+          <div 
+            className="back-button flex-center" 
+            onClick={ () => { setTabIndex(0) } }
+          >
             <ArrowBackIcon/>
           </div>
         }
         { /* this is a hack over here */ }
-        <div className="tab-offset" style={ { '--index': tabIndex > 0 ? '1' : '0' } as React.CSSProperties }>
+        <div 
+          className="tab-offset" 
+          style={ { '--index': tabIndex > 0 ? '1' : '0' } as React.CSSProperties }
+        >
           { React.Children.map(children, (child, index) => {
             return (
-              <div className="page flex-center" style={ { display: index !== tabIndex && index > 0 ? 'none' : '' } }>
+              <div 
+                className="page flex-center" 
+                style={ { display: index !== tabIndex && index > 0 ? 'none' : '' } }
+              >
                 { child }
               </div>
             ) })

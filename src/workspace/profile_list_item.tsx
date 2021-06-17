@@ -13,9 +13,9 @@ import Account from '../client/account'
 
 function ProfileListItem(props: { client: JdamClient }) {
   
-  const [ email, setEmail ] = useState(props.client.email)
-  const [ nickname, setNickname ] = useState(props.client.nickname)
-  const [ avatarId, setAvatarId ] = useState(props.client.avatarId)
+  const [ email, setEmail ] = useState(props.client.account.email)
+  const [ nickname, setNickname ] = useState(props.client.account.nickname)
+  const [ avatarId, setAvatarId ] = useState(props.client.account.avatarId)
   const [ openAccountSettings, setOpenAccountSettings ] = useState(false)
 
   const handleOnOpenAccountSettings = () => {

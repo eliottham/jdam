@@ -25,7 +25,7 @@ class Metro extends Evt {
      * suffix is whether it is "high" or "low"
      */
     try {
-      const response = await fetch(`metro/pings/${prefix}_${suffix}`, {
+      const response = await fetch(`processor/clicks?name=${prefix}&type=${suffix}`, {
         method: 'GET'
       })
       const blob = await response.blob()
@@ -63,6 +63,7 @@ class Metro extends Evt {
 
   async getClicks(prefix: string) {
     
+    /* load click files and create audio buffers for each; cache for reuse */
     if (prefix === this.clickPrefixName) {
       this.fire('get-clicks', { clicks: [ this.clickHigh, this.clickLow ] })
       return [ this.clickHigh, this.clickLow ]
