@@ -62,10 +62,23 @@ function WaveformIcon(props: SvgIconProps): JSX.Element {
   )
 }
 
+function EditSoundIcon(props: SvgIconProps): JSX.Element {
+  return (
+    <SvgIcon { ...props }>
+      <g id="edit_stops">
+        <path d="M11.19,12l-3.737,-3.704l0,7.408l3.737,-3.704Zm1.625,-0l3.736,3.704l0,-7.408l-3.736,3.704Z"/>
+        <circle cx="3.33" cy="12" r="2.47"/>
+        <circle cx="20.67" cy="12" r="2.47"/>
+      </g>
+    </SvgIcon>
+  )
+}
+
 export {
   NoteIcon,
   TriRightSmallIcon,
   TriLeftSmallIcon,
   CircleSmallIcon,
-  WaveformIcon
+  WaveformIcon,
+  EditSoundIcon
 }

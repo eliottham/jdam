@@ -33,6 +33,7 @@ class Sound extends Evt {
   ownerNode?: LoopNode
   /* the sound file */
   file?: File
+  audioBuffer?: AudioBuffer
   frames?: Frames
   ms?: number
 

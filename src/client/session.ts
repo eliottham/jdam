@@ -425,23 +425,45 @@ class Session extends Evt implements ITransport {
   }
 
   async downloadSoundFile(uid: string) {
-    const response = await fetch(`/sessions/${this.sessionId}/stream/download/${uid}`, {
-      method: 'GET'
-    })
 
-    const contentType = response.headers.get('Content-Type')
-    if (!contentType) {
-      this.fire('download-sound-file', { errors: [ 'no content type / file not found' ] })
-      return
+    const maxAttempts = 3
+
+    /* 
+     * set up helper function to attempt to download file multiple times if
+     * audio buffer cannot be decoded 
+     */
+    const download = async (attempts = 0): Promise<{ file?: File, audioBuffer?: AudioBuffer }> => {
+      const response = await fetch(`/sessions/${this.sessionId}/stream/download/${uid}`, {
+        method: 'GET'
+      })
+
+      const contentType = response.headers.get('Content-Type')
+      if (!contentType) {
+        this.fire('download-sound-file', { errors: [ 'no content type / file not found' ] })
+        return {}
+      }
+
+      const fileType = contentType?.split(';')[0].split('/')[1]
+
+      const blob = await response.blob()
+
+      const file = new File([ blob ], `${uid}.${fileType}`, {
+        type: contentType
+      })
+
+      try {
+        const arrayBuffer = await blob.arrayBuffer()
+        const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer)
+        return { file, audioBuffer }
+      } catch (err) {
+        if (attempts < maxAttempts) { return await download(attempts + 1) }
+      }
+      return {}
     }
 
-    const fileType = contentType?.split(';')[0].split('/')[1]
+    const { file, audioBuffer } = await download()
 
-    const blob = await response.blob()
-
-    const file = new File([ blob ], `${uid}.${fileType}`, {
-      type: contentType
-    })
+    if (!file || !audioBuffer) { return }
 
     this.fire('download-sound-file', { file })
 
@@ -450,13 +472,13 @@ class Session extends Evt implements ITransport {
     if (sound) {
       try {
         const { frames, ms } = await this.getSoundPeaks({ file })
-        this.assignFileToSound({ file, frames, sound, ms })
+        this.assignFileToSound({ file, audioBuffer, frames, sound, ms })
         return
       } catch (err) {
         this.fire('errors', { errors: [ 'could not fetch sound peaks' ] })
       }
 
-      this.assignFileToSound({ file, sound })
+      this.assignFileToSound({ file, sound, audioBuffer })
     }
   }
 
@@ -473,15 +495,18 @@ class Session extends Evt implements ITransport {
       })
     }
 
+
     this._editingSound = sound
     /* cram the current sound in to the transport and set the playhead back to 0 */
     this.transport.stop()
     this._editorTransport.stop()
-    this._editorTransport.setScheduling(true).setSounds({ sounds: [ this._editingSound ] })
+    this._editorTransport.setSounds({ sounds: [ this._editingSound ] })
     if (sound.stops) {
       this._editorTransport.leadIn(sound.stops[1])
     }
-    this.fire('edit-sound', { sound }) 
+
+    /* check if editing an existing sound */
+    this.fire('edit-sound', { sound, newSound: !this.sounds.has(sound.uid) }) 
   }
 
   editNewSound({ node }: { node?: LoopNode }) {
@@ -515,23 +540,44 @@ class Session extends Evt implements ITransport {
      * upsertSound's response handler will automatically call "assignSoundToNode'
      */
     this.upsertSound(sound)
-    await this.uploadSoundFile({ file: sound.file, soundUid: sound.uid })
+    if (!sound.file) {
+      await this.uploadSoundFile({ file: sound.file, soundUid: sound.uid })
+    }
     this.fire('save-edit-sound', { sound }) 
   }
 
-  assignFileToSound({ file, frames, ms, sound }: { file: File, frames?: Frames, ms?: number, sound: Sound }) {
+  assignFileToSound({
+    file,
+    audioBuffer,
+    frames,
+    ms,
+    sound
+  }: {
+    file: File,
+    audioBuffer: AudioBuffer
+    frames?: Frames,
+    ms?: number,
+    sound: Sound 
+  }) {
     /* transport will also fire the event for the sound object */
     if (sound === this._editingSound) {
-      this._editorTransport.setSoundFile({ file, frames, ms, sound })
+      this._editorTransport.setSoundFile({ file, audioBuffer, frames, ms, sound })
       this._editorTransport.resetSoundStops({ sound })
     } else {
-      this.transport.setSoundFile({ file, frames, ms, sound })
+      this.transport.setSoundFile({ file, audioBuffer, frames, ms, sound })
     }
-    this.fire('set-sound-file', { file, frames, ms, sound })
+    this.fire('set-sound-file', { file, audioBuffer, frames, ms, sound })
   }
 
   async convertSoundFile({ file, start, end }: { file: File, start?: number, end?: number }) {
     /* trim also converts the file */
+    const urlParams = new URLSearchParams()
+    if (typeof start === 'number') {
+      urlParams.append('start', '' + start)
+    }
+    if (typeof end === 'number') {
+      urlParams.append('end', '' + end)
+    }
     const response = await fetch(`/processor/trim`, {
       method: 'POST',
       headers: {
@@ -580,16 +626,27 @@ class Session extends Evt implements ITransport {
     const newFile = await this.convertSoundFile({ file })
     const { frames, ms } = await this.getSoundPeaks({ file: newFile })
 
-    this.fire('process-sound-file', { file: newFile, frames, ms })
+    /* immediately convert to audioBuffer */
+    try {
+      const arrayBuffer = await newFile.arrayBuffer()
+      const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer)
 
-    if (sound) {
-      this.assignFileToSound({ file: newFile, frames, sound, ms })
+      this.fire('process-sound-file', { file: newFile, audioBuffer, frames, ms })
+
+      if (sound) {
+        this.assignFileToSound({ file: newFile, audioBuffer, frames, sound, ms })
+      }
+
+      return { file: newFile, audioBuffer, frames, ms }
+
+    } catch (err) {
+      /* do nothing */
     }
-
+  
     return { file: newFile, frames, ms }
   }
 
-  async routeChain({ endNode }: { endNode?: LoopNode }) {
+  routeChain({ endNode }: { endNode?: LoopNode }) {
     if (!endNode) {
       const nodeChain = this.rootNode.chain()
       if (nodeChain.length < 1) { return } /* this means there are no nodes */
@@ -599,7 +656,7 @@ class Session extends Evt implements ITransport {
 
     const sounds = [ ...endNode.getInheritedSounds(), ...endNode.getSounds() ]
 
-    await this.transport.setScheduling(true).setSounds({ sounds })
+    this.transport.setSounds({ sounds })
   }
 
   async playChain({ endNode }: { endNode?: LoopNode }) {

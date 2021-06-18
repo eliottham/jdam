@@ -25,12 +25,10 @@ class Transport extends Evt implements ITransport {
   destination?: AudioNode
   startTime = 0 /* current time when audioCtx started playing, used to offset the playhead */
   audioNodeMap = new Map<Sound, { 
-    audioBuffer: AudioBuffer,
     gain: GainNode,
     pan: StereoPannerNode
   }>()
   activeSources = new Map<AudioBufferSourceNode, GainNode>()
-  scheduling = false
   loopLength = -1
   loopTimerId = -1
   loopStart = 0
@@ -50,12 +48,6 @@ class Transport extends Evt implements ITransport {
       this.fire('play-state', { playState: this.audioCtx.state })
     })
 
-  }
-
-  setScheduling(scheduling: boolean) {
-    this.scheduling = scheduling
-    this.fire('set-scheduling', { scheduling })
-    return this
   }
 
   setSoundStops({ sound, stops }: { sound: Sound, stops: number[] }) {
@@ -122,7 +114,19 @@ class Transport extends Evt implements ITransport {
     this.setSoundPan({ sound, pan: 0 })
   }
 
-  setSoundFile({ file, frames, ms, sound }: { file: File, frames?: Frames, ms?: number, sound: Sound }) {
+  setSoundFile({ 
+    file,
+    audioBuffer,
+    frames,
+    ms,
+    sound
+  }: { 
+    file: File,
+    audioBuffer: AudioBuffer,
+    frames?: Frames,
+    ms?: number,
+    sound: Sound 
+  }) {
     sound.file = file
     if (frames) { sound.frames = frames }
 
@@ -130,8 +134,10 @@ class Transport extends Evt implements ITransport {
       sound.ms = ms 
     }
 
-    this.fire('set-sound-file', { sound, file, frames, ms })
-    sound.fire('set-sound-file', { sound, file, frames, ms })
+    sound.audioBuffer = audioBuffer
+
+    this.fire('set-sound-file', { sound, audioBuffer, file, frames, ms })
+    sound.fire('set-sound-file', { sound, audioBuffer, file, frames, ms })
 
     this.routeSingleSound({ sound })
   }
@@ -143,7 +149,6 @@ class Transport extends Evt implements ITransport {
     for (const sound of this.sounds) {
       startedSounds += this.queueSingleSound({
         sound,
-        scheduled: this.scheduling,
         offset 
       }) ? 1 : 0
     }
@@ -155,7 +160,7 @@ class Transport extends Evt implements ITransport {
     return !!this.queueSingleSound({ sound, offset })
   }
 
-  async routeSingleSound({ 
+  routeSingleSound({ 
     sound,
     audioCtx = this.audioCtx,
     destination = this.destination || this.audioCtx.destination
@@ -163,16 +168,9 @@ class Transport extends Evt implements ITransport {
     sound: Sound,
     audioCtx?: AudioContext,
     destination?: AudioNode,
-    scheduled?: boolean,
     start?: number
   }) {
     if (!sound.file || !destination || !audioCtx) { return }
-
-    const arrayBuffer = await sound.file.arrayBuffer()
-    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
-
-    if (!audioBuffer) { return }
-
 
     /* use the soundNodes/paramValues directly from the sound object */
     const pan = audioCtx.createStereoPanner()
@@ -182,7 +180,6 @@ class Transport extends Evt implements ITransport {
     gain.connect(pan).connect(destination)
 
     this.audioNodeMap.set(sound, {
-      audioBuffer,
       gain,
       pan
     })
@@ -192,19 +189,18 @@ class Transport extends Evt implements ITransport {
 
   queueSingleSound({ 
     sound,
-    scheduled = this.scheduling, /* whether to play normally or schedule at stops[1] */
     offset = 0, /* this offset moves the loopStart position */ 
     audioCtx = this.audioCtx
   }: { 
     sound: Sound,
-    scheduled?: boolean,
     offset?: number,
     audioCtx?: AudioContext
   }) {
     const nodes = this.audioNodeMap.get(sound)
     if (!nodes) { return }
 
-    const { audioBuffer, pan, gain } = nodes
+    const { pan, gain } = nodes
+    const audioBuffer = sound.audioBuffer
     if (!audioBuffer || !pan || !gain ) { return }
 
     let stops = sound.stops.slice()
@@ -271,7 +267,7 @@ class Transport extends Evt implements ITransport {
 
     stops.push(soundLocalPlayhead)
     const times = stops.map(stop => Math.max(0, phr(lToA(stop))) / 1000)
-    const adjAmount = 0.05
+    const adjAmount = 0.02
 
     if (soundLocalPlayhead < stops[1]) {
       let adj = 0
@@ -440,7 +436,7 @@ class Transport extends Evt implements ITransport {
     return this
   }
 
-  async setSounds({ sounds }: { sounds: Sound[] }) {
+  setSounds({ sounds }: { sounds: Sound[] }) {
     this.stop()
     this.sounds = sounds.slice()
     /* clear the audioNodeMap and re-route everything */
@@ -450,11 +446,11 @@ class Transport extends Evt implements ITransport {
      * state and new state to avoid re-reouting everything again
      */
     this.audioNodeMap.clear()
-    await Promise.all(sounds.map(sound => {
-      return this.routeSingleSound({
+    for (const sound of sounds) { 
+      this.routeSingleSound({
         sound
       })
-    }))
+    }
     return this
   }
 

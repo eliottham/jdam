@@ -148,15 +148,14 @@ const renderFrames = ({
     }
 
     if (gradient) {
-      const offset = 1 - stopFacs[1]
       let grad = ctx.createLinearGradient(0, 0, width, 0)
-      grad.addColorStop(stopFacs[0] + offset, `${primaryColorHex}00`)
-      grad.addColorStop(stopFacs[1] + offset, primaryColorHex)
+      grad.addColorStop(1 + stopFacs[0] - stopFacs[1], `${primaryColorHex}00`)
+      grad.addColorStop(1, primaryColorHex)
       ctx.fillStyle = grad
 
       grad = ctx.createLinearGradient(0, 0, width, 0)
-      grad.addColorStop(stopFacs[0] + offset, `${primaryColorHex}33`)
-      grad.addColorStop(stopFacs[1] + offset, primaryColorHex)
+      grad.addColorStop(1 + stopFacs[0] - stopFacs[1], `${primaryColorHex}33`)
+      grad.addColorStop(1, primaryColorHex)
       ctx.strokeStyle = grad
     }
 

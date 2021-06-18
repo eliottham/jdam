@@ -2,10 +2,11 @@ import { BaseSyntheticEvent, useState, useEffect, useRef } from 'react'
 
 import Session from '../../../client/session'
 import LoopNode from '../../../client/loop_node'
-import Sound, { Frames } from '../../../client/sound'
+import Sound from '../../../client/sound'
 
 import { NoteIcon } from '../../../comps/icons'
 import SlidingPageDialog from '../../../comps/sliding_page_dialog'
+import CloseableDialog from '../../../comps/closeable_dialog'
 import BigAction from '../../../comps/big_action'
 
 import SoundVisualization from './sound_visualization'
@@ -78,6 +79,13 @@ const useStyles = makeStyles({
     '&.MuiButton-root': {
       marginTop: '30px',
       gridArea: 'yes'
+    }
+  },
+  editor: {
+    '& .MuiPaper-root': {
+      minWidth: 680,
+      minHeight: 500,
+      padding: '1em'
     }
   }
 })
@@ -311,7 +319,7 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
         startIcon={ <PublishIcon/> }
         onClick={ handleSaveEditSound }
       >
-        UPLOAD
+        { session.sounds.has(sound.uid) ? 'SAVE' : 'UPLOAD' }
       </Button>
     </div>
   )
@@ -326,6 +334,8 @@ interface SoundEditorDialogProps {
 }
 
 function SoundEditorDialog({ session, sound, open, ...props }: SoundEditorDialogProps): JSX.Element {
+
+  const classes = useStyles()
 
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -368,38 +378,54 @@ function SoundEditorDialog({ session, sound, open, ...props }: SoundEditorDialog
     }
   }
 
-  return (
-    <SlidingPageDialog
-      open={ open }
-      height={ 500 }
-      onClose={ onClose }
-      tabIndex={ tabIndex }
-      setTabIndex={ setTabIndex } 
-      disableBackdropClose={ true }
-    >
-      <>
-        <BigAction label="UPLOAD" onClick={ onClickUpload }>
-          <PublishIcon/>
-          <input 
-            ref={ inputRef }
-            type="file" 
-            accept="audio/*"
-            style={ { display: 'none' } }
-            onChange={ handleFileChange }
-          />
-        </BigAction>
-        <BigAction label="RECORD" onClick={ () => { setTabIndex(1) } }>
-          <NoteIcon/>
-        </BigAction>
-      </>
-      { !!sound &&
+  if (sound && session.sounds.has(sound.uid)) {
+    return (
+      <CloseableDialog
+        open={ open }
+        onClose={ onClose }
+        disableBackdropClose={ true }
+        className={ classes.editor }
+      >
         <SoundEditor
           sound={ sound }
           session={ session }
         />
-      }
-    </SlidingPageDialog>
-  )
+      </CloseableDialog>
+    )
+  } else {
+    return (
+      <SlidingPageDialog
+        open={ open }
+        height={ 500 }
+        onClose={ onClose }
+        tabIndex={ tabIndex }
+        setTabIndex={ setTabIndex } 
+        disableBackdropClose={ true }
+      >
+        <>
+          <BigAction label="UPLOAD" onClick={ onClickUpload }>
+            <PublishIcon/>
+            <input 
+              ref={ inputRef }
+              type="file" 
+              accept="audio/*"
+              style={ { display: 'none' } }
+              onChange={ handleFileChange }
+            />
+          </BigAction>
+          <BigAction label="RECORD" onClick={ () => { setTabIndex(1) } }>
+            <NoteIcon/>
+          </BigAction>
+        </>
+        { !!sound &&
+          <SoundEditor
+            sound={ sound }
+            session={ session }
+          />
+        }
+      </SlidingPageDialog>
+    )
+  }
 }
 
 export default SoundEditor

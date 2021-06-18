@@ -55,7 +55,7 @@ function SessionView({ session, setActive = false }: SessionViewProps): JSX.Elem
       }
     }
 
-    const onEditSound = ({ sound, node }: { sound: Sound, node?: LoopNode }) => {
+    const onEditSound = ({ sound }: { sound: Sound }) => {
       setEditingSound(sound)
     }
 

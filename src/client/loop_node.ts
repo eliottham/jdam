@@ -119,8 +119,8 @@ class LoopNode extends Evt implements ITransport {
     this.session?.addNode({ parentUid: this.uid })
   }
 
-  editSound() {
-    this.session?.editSound({ node: this })
+  editSound({ sound }: { sound: Sound }) {
+    this.session?.editSound({ sound, node: this })
   }
 
   editNewSound() {
