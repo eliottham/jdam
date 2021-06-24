@@ -3,7 +3,7 @@ import { URL } from 'url'
 import fs, { promises as fsp } from 'fs'
 import { Writable } from 'stream'
 import { generateRandomBitString } from 'jdam-utils'
-import { stream } from './wave.mjs'
+import { stream, metronome } from './wave.mjs'
 import path from 'path'
 import mime from 'mime-types'
 
@@ -192,7 +192,7 @@ async function clicks(params) {
     name
   } = params
 
-  const fileName = `${name}_${type}.raw`
+  const fileName = `${name}_${type}`
   const resolvedPath = path.resolve(`./clicks/${fileName}.raw`)
 
   req.on('error', err => {
@@ -214,6 +214,106 @@ async function clicks(params) {
     })
 
     readStream.pipe(res)
+  } catch (err) {
+    res.writeHead(404, 'there was a massive error', {
+      'Content-Type': 'application/json'
+    })
+    res.end(JSON.stringify({
+      success: false,
+      errors: [ 'there was a massive error', err.message ]
+    }))
+  }
+
+}
+
+async function metro(params) {
+  const {
+    req,
+    res,
+    bpm = '120',
+    /* division = 4, */
+    pattern = '[ 2, 1, 1, 1 ]', /* 2 for high ping, 1 for low ping, 0 for off */
+    measures = '1',
+    name = 'click'
+  } = params
+
+  const errors = []
+  const metroParams = {
+    bpm: Number(bpm),
+    measures: Number(measures)
+  }
+  if (isNaN(metroParams)) {
+    errors.push('bpm must be a number')
+  } else if (metroParams.bpm < 60) {
+    errors.push('bpm must be greater than 60')
+  } else if (metroParams.bpm > 1120) {
+    errors.push('bpm must be less than 1120 (280)')
+  }
+
+  if (isNaN(metroParams.measures)) {
+    errors.push('measures must be a number')
+  } else if (metroParams.measures < 1) {
+    errors.push('measures must be greater 1')
+  } else if (metroParams.measures > 8) {
+    errors.push('measures must be less than 8')
+  }
+
+  try {
+    metroParams.pattern = JSON.parse(pattern)
+    if (!Array.isArray(metroParams.pattern)) {
+      errors.push('pattern must be an array')
+    } else if (metroParams.pattern === 0) {
+      errors.push('pattern must have at least 1 beat')
+    } else if (metroParams.pattern > 19) {
+      errors.push('pattern must be an array')
+    } 
+
+    const checksum = metroParams.pattern.reduce((sum, val) => sum + val, 0)
+
+    if (typeof checksum !== 'number') {
+      /* check if pattern has any non-numbers */
+      errors.push('pattern must be an array of numbers')
+    } else if (!checksum) {
+      /* check if pattern has no actual beats */ 
+      errors.push('pattern must contain at least one beat (not be silent)')
+    }
+  } catch (err) {
+    errors.push('pattern was incorrectly formatted')
+  }
+  
+  if (errors.length) {
+    res.writeHead(410, 'request error', {
+      'Content-Type': 'application/json'
+    })
+    res.end(JSON.stringify({
+      success: false,
+      errors 
+    }))
+    return
+  }
+
+  req.on('error', err => {
+    res.writeHead(500, 'request error', {
+      'Content-Type': 'application/json'
+    })
+    res.end(JSON.stringify({
+      success: false,
+      errors: [ 'request error', err.message ]
+    }))
+  })
+
+  try {
+    res.writeHead(200, 'good to go', {
+      'Content-Type': 'application/flac'
+    })
+
+    metronome({
+      bpm,
+      pattern,
+      measures,
+      name,
+      writeStream: res
+    })
   } catch (err) {
     res.writeHead(404, 'there was a massive error', {
       'Content-Type': 'application/json'
@@ -254,16 +354,30 @@ const streamingServer = http.createServer((req, res) => {
         end: searchParams.get('end')
       })
       return
-    } else if (pathname.startsWith('/clicks')) {
+    } 
+  } else if (method === 'GET') {
+    if (pathname.startsWith('/clicks')) {
       clicks({
         req,
         res,
         name: searchParams.get('name'),
         type: searchParams.get('type')
       })
+      return
+    } else if (pathname.startsWith('/metro')) {
+      metro({
+        req,
+        res,
+        name: searchParams.get('name'),
+        bpm: searchParams.get('bpm'),
+        pattern: searchParams.get('pattern'),
+        measures: searchParams.get('measures')
+      })
+      return
     }
   }
 
+  /* fallback */
   res.writeHead(404, 'no').end()
 
 })

@@ -267,31 +267,53 @@ class SessionOps {
     return { sessionId: containerId, title, description, length: sessionLength }
   }
 
-  joinSession({ sessionId, accountId }) {
+  async joinSession({ sessionId, accountId }) {
+    const session = await this.db.collection('sessions').findOne({
+      _id: sessionId
+    })
+    if (!session) { throw Error('session not found') }
     this.write(sessionId, -1, JSON.stringify({ req : { addAccount: accountId }}))
+    return session
   }
 
-  leaveSession({ sessionId, accountId }) {
+  async leaveSession({ sessionId, accountId }) {
+    const session = await this.db.collection('sessions').findOne({
+      _id: sessionId
+    })
+    if (!session) { throw Error('session not found') }
     this.write(sessionId, -1, JSON.stringify({ req : { deleteAccount: accountId }}))
+    return session
   }
 
-  endSession(sessionId) {
+  async endSession(sessionId) {
+    const session = await this.db.collection('sessions').findOne({
+      _id: sessionId
+    })
+    if (!session) { throw Error('session not found') }
     this.write(sessionId, -1, JSON.stringify({ req : { endSession: true }}))
+    return session
   }
 
   /* find session(s) by name, accountId, or both */
-  async findSessions({ name, accountId }) {
+  async findSessions({ title, sessionId, accountId }) {
 
     if (!this.db) { throw Error('Database not found') }
 
     const sessions = this.db.collection('sessions')
     
     const results = await sessions.find({
-      name,
+      ...title && { title },
+      ...sessionId && { _id: sessionId },
       ...accountId && { accounts: accountId }
+    }, { 
+      /* 
+       * TODO: remove limit... but let's be honest, why are you leafing through
+       * like 900 sessions anyway?
+       */
+      limit: 10
     })
 
-    return results
+    return await results.toArray()
   }
 
   async purgeSessions() {

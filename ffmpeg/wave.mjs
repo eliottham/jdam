@@ -58,7 +58,9 @@ async function metronome({
   bpm = 120,
   /* division = 4, */
   pattern = [ 2, 1, 1, 1 ], /* 2 for high ping, 1 for low ping, 0 for off */
-  measures = 1
+  measures = 1,
+  name = 'click',
+  writeStream
 }) {
 
   /* 
@@ -75,14 +77,16 @@ async function metronome({
   const rawFile = path.resolve(fileName + '.raw')
   const wavFile = path.resolve(fileName + '.flac')
 
-  const writeStream = fs.createWriteStream(rawFile)
+  if (!writeStream) {
+    writeStream = fs.createWriteStream(rawFile)
+  }
 
   // const length = (beats * beats * 60) / (bpm * division)
   const length = (60 / bpm) * beats
   const sampleSize = BYTE_DEPTH /* we are forcing mono, so omit multiplying by channel count */
   const offsetStartToStart = (length / beats) * SAMPLE_RATE * sampleSize /* bytes between the starts of each ping */
 
-  const [ highPing, lowPing ] = await Promise.all([ fsp.readFile('./click_high.raw'), fsp.readFile('./click_low.raw') ])
+  const [ highPing, lowPing ] = await Promise.all([ fsp.readFile(`./clicks/${name}_high.raw`), fsp.readFile(`./clicks/${name}_low.raw`) ])
 
   /* start writing pcm data */
   const totalBytes = (length * measures * SAMPLE_RATE * sampleSize)

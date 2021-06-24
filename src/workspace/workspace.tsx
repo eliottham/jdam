@@ -20,6 +20,7 @@ import {
 
 import SessionDialog from './session/session_dialog'
 import SessionView from './session/session_view'
+import { JoinSessionFromUrl } from './session/join_session'  
 
 import { makeStyles } from '@material-ui/styles'
 
@@ -66,6 +67,7 @@ function Workspace(props: { client: JdamClient }) {
   const [ sessions, setSessions ] = useState<Session[]>([])
   const [ creatingSession, setCreatingSession ] = useState(false)
   const [ tabIndex, setTabIndex ] = useState(0)
+  const [ showJoinFromUrl, setShowJoinFromUrl ] = useState(false)
 
   useEffect(() => {
     const onSetActiveSession = ({ session }: { session?: Session }) => {
@@ -81,9 +83,14 @@ function Workspace(props: { client: JdamClient }) {
       setCreatingSession(false)
     }
 
+    const onPromptJoinSessionUrl = () => {
+      setShowJoinFromUrl(true)
+    }
+
     props.client.on('set-sessions', onSetSessions)
     props.client.on('active-session', onSetActiveSession)
     props.client.on('cancel-create-session', onCancelCreateSession)
+    props.client.on('prompt-join-session-url', onPromptJoinSessionUrl)
 
     let activityTimerId = -1
     
@@ -100,6 +107,7 @@ function Workspace(props: { client: JdamClient }) {
       props.client.un('set-sessions', onSetSessions)
       props.client.un('active-session', onSetActiveSession)
       props.client.un('cancel-create-session', onCancelCreateSession)
+      props.client.un('prompt-join-session-url', onPromptJoinSessionUrl)
       window.removeEventListener('mousemove', onActivity) 
       window.clearTimeout(activityTimerId)
     }
@@ -216,6 +224,11 @@ function Workspace(props: { client: JdamClient }) {
         </Switch>   
         <DeviceManager client={ props.client } />
       </div>
+      <JoinSessionFromUrl 
+        open={ showJoinFromUrl }
+        setOpen={ setShowJoinFromUrl }
+        client={ props.client } 
+      />
     </Router>
   )
 }

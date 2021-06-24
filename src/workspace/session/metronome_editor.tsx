@@ -206,7 +206,7 @@ function MetronomeEditor(props: MetronomeProps): JSX.Element {
   const [ pattern, setPattern ] = useState<number[]>(props.pattern)
   const [ measures, setMeasures ] = useState(4)
   const [ enablePreview, setEnablePreview ] = useState(!!props.metro.clickPrefixName)
-  const [ playing, setPlaying ] = useState(props.metro._playing)
+  const [ playing, setPlaying ] = useState(props.metro.playing)
 
   useEffect(() => {
     /* do nothing */  

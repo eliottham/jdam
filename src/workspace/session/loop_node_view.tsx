@@ -3,7 +3,7 @@ import Sound from '../../client/sound'
 import Transport from '../../client/sound_transport'
 import Session from '../../client/session'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 import { Paper } from '@material-ui/core'
 
@@ -109,9 +109,14 @@ function LoopNodeView({
 
   const classes = useStyles()
 
+  /* 
+   * using a ref here to forcefully-avoid redraws of the canvas element in the
+   * visualization component 
+   */
+  const playheadRef = useRef<HTMLDivElement>(null)
+
   const [ inheritedSounds, setInheritedSounds ] = useState<Sound[]>(node.getInheritedSounds())
   const [ sounds, setSounds ] = useState<Sound[]>(node.getSounds())
-  const [ playhead, setPlayhead ] = useState(0)
   const [ ms, setMs ] = useState(session.info.ms)
 
   useEffect(() => {
@@ -124,20 +129,25 @@ function LoopNodeView({
       setSounds(node.getSounds())
     }
 
-    const onSetPlayhead = ({ ms }: {ms: number }) => {
-      setPlayhead(ms)
+    const onSetPlayhead = ({ ms: playhead }: {ms: number }) => {
+      if (!playheadRef.current) { return }
+      playheadRef.current.style.left = `${100 * playhead / ms}%`
     }
 
-    transport.on('set-sound-file', onModifyNode)
     transport.on('set-playhead', onSetPlayhead)
+    transport.on('set-sound-file', onModifyNode)
+    session.on('update-sound', onModifyNode)
+    session.on('set-sounds', onModifyNode)
     node.on('assign-sound', onModifyNode)
 
     return () => {
-      transport.un('set-sound-file', onModifyNode)
       transport.un('set-playhead', onSetPlayhead)
+      transport.un('set-sound-file', onModifyNode)
+      session.un('update-sound', onModifyNode)
+      session.un('set-sounds', onModifyNode)
       node.un('assign-sound', onModifyNode)
     }
-  }, [ session, node, transport ])
+  }, [ session, node, transport, ms ])
 
   const handleOnClick = () => {
     onSelect?.(node)
@@ -221,8 +231,9 @@ function LoopNodeView({
         </div>
         <div className={ classes.playheadContainer } >
           <div
+            ref={ playheadRef }
             className="playhead"
-            style={ { left: `${100 * playhead / ms}%` } }
+            style={ { left: 0 } }
           />
         </div>
       </div>

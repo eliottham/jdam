@@ -8,6 +8,8 @@ import { NoteIcon } from '../../../comps/icons'
 import SlidingPageDialog from '../../../comps/sliding_page_dialog'
 import CloseableDialog from '../../../comps/closeable_dialog'
 import BigAction from '../../../comps/big_action'
+import FormField from '../../../comps/form_field'
+import Validation from '../../../client/validation'
 
 import SoundVisualization from './sound_visualization'
 import StopHandle, { iconSize } from './stop_handle'
@@ -20,6 +22,7 @@ import PublishIcon from '@material-ui/icons/Publish'
 import PlayArrowIcon from '@material-ui/icons/PlayArrow'
 import StopIcon from '@material-ui/icons/Stop'
 import PauseIcon from '@material-ui/icons/Pause'
+import DeleteIcon from '@material-ui/icons/Delete'
 import { WaveformIcon } from '../../../comps/icons'
 
 const soundVisHeight = 256
@@ -29,18 +32,21 @@ const useStyles = makeStyles({
     minHeight: soundVisHeight,
     width: '100%',
     display: 'grid',
-    gridTemplateAreas: `"vis"
-                        "con"
-                        "yes"`,
-    gridTemplateRows: 'min-content 1fr min-content',
+    gridTemplateAreas: `"labl field"
+                        "vis   vis"
+                        "con   con"
+                        "trash yes"`,
+    gridTemplateRows: 'min-content min-content 1fr min-content',
+    gridTemplateColumns: 'max-content auto',
     position: 'relative',
-    marginTop: 'auto'
+    paddingTop: 24
   },
   vis: {
     gridArea: 'vis',
     position: 'relative',
     height: soundVisHeight,
     marginBottom: iconSize + 8,
+    marginTop: 8,
     '& .playhead': {
       position: 'absolute',
       top: 0,
@@ -77,8 +83,18 @@ const useStyles = makeStyles({
   },
   submitButton: {
     '&.MuiButton-root': {
-      marginTop: '30px',
-      gridArea: 'yes'
+      marginTop: 10,
+      gridArea: 'trash / trash / yes / yes',
+      '&.save-button': {
+        gridArea: 'yes'
+      }
+    }
+  },
+  deleteButton: {
+    '&.MuiIconButton-root': {
+      borderRadius: 4,
+      marginTop: 10,
+      gridArea: 'trash'
     }
   },
   editor: {
@@ -128,6 +144,7 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
   const [ playhead, setPlayhead ] = useState(session._editorTransport.playhead)
   const [ playState, setPlayState ] = useState(session._editorTransport.getPlayState()) 
   const [ showHandles, setShowHandles ] = useState(!!sound.file)
+  const [ soundName, setSoundName ] = useState(sound.name)
 
   useEffect(() => {
     const onSetSoundFile = ({ sound }: { sound: Sound }) => {
@@ -150,16 +167,28 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
       setPlayState(playState)
     }
 
+    const onSetSoundName = ({ name }: { name: string }) => {
+      setSoundName(name)
+    }
+
+    const onUpdateSound = ({ sound }: { sound: Sound }) => {
+      onSetSoundName({ name: sound.name })
+    }
+
     session._editorTransport.on('set-play-state', onSetPlayState)
     session._editorTransport.on('set-playhead', onSetPlayhead)
     sound.on('set-sound-file', onSetSoundFile)
     sound.on('set-sound-stops', onSetSoundStops)
+    sound.on('set-sound-name', onSetSoundName)
+    sound.on('update-sound', onUpdateSound)
 
     return () => {
       session._editorTransport.un('set-play-state', onSetPlayState)
       session._editorTransport.un('set-playhead', onSetPlayhead)
       sound.un('set-sound-file', onSetSoundFile)
       sound.un('set-sound-stops', onSetSoundStops)
+      sound.un('set-sound-name', onSetSoundName)
+      sound.un('update-sound', onUpdateSound)
     }
   }, [ sound, session ])
 
@@ -223,12 +252,31 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
   const handleSaveEditSound = () => {
     session.saveEditSound()
   }
+  
+  const handleDeleteSound = () => {
+    session.deleteEditSound()
+  }
+
+  const handleChangeSoundName = (newValue: string) => {
+    session._editorTransport.setSoundName({ sound, name: newValue })
+  }
+
+  const existingSound = session.sounds.has(sound.uid)
 
   return (
     <div 
       ref={ ref }
       className={ classes.root }
     >
+      <FormField
+        fragment={ true }
+        name="name"
+        label="Sound Name"
+        fieldValue={ soundName }
+        setFieldValue={ setSoundName }
+        validation={ Validation.validateSafeText }
+        onChange={ handleChangeSoundName }
+      />
       <div className={ classes.vis }>
         <div 
           className="playhead"
@@ -315,12 +363,20 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
       </div>
       <Button 
         variant="contained"
-        className={ classes.submitButton }
+        className={ `${classes.submitButton} ${existingSound ? 'save-button' : ''}` }
         startIcon={ <PublishIcon/> }
         onClick={ handleSaveEditSound }
       >
-        { session.sounds.has(sound.uid) ? 'SAVE' : 'UPLOAD' }
+        { existingSound ? 'SAVE' : 'UPLOAD' }
       </Button>
+      { existingSound &&
+        <IconButton 
+          className={ classes.deleteButton }
+          onClick={ handleDeleteSound }
+        >
+          <DeleteIcon/>
+        </IconButton>
+      }
     </div>
   )
 }

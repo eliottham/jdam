@@ -10,6 +10,7 @@ import JdamClient from '../../client/jdam_client'
 import Validation from '../../client/validation'
 
 import MetronomeEditor from './metronome_editor'
+import JoinSession from './join_session'
 
 const fieldTemplates: FormFieldTemplate[] = [
   {
@@ -156,6 +157,7 @@ function SessionDialog({
     props.client.on('create-session', onCreateSession)
     return () => {
       props.client.un('create-session', onCreateSession)
+      props.client.metro.previewMetroStop()
       window.clearTimeout(timeoutIndex)
       if (!open) { setShowErrors(false) }
     }
@@ -200,6 +202,9 @@ function SessionDialog({
         formValid={ formValid }
         setFormValid={ setFormValid }
         onSetHeight={ onSetHeight }
+      />
+      <JoinSession
+        client={ props.client }
       />
     </SlidingPageDialog>
   )

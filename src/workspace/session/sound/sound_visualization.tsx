@@ -1,5 +1,4 @@
 import { useRef, useEffect, CanvasHTMLAttributes } from 'react'
-import { primaryColorHex } from '../../../app'
 import Sound from '../../../client/sound'
 
 interface SoundVisualizationProps {
@@ -30,6 +29,12 @@ const renderFrames = ({
 } & SoundVisualizationProps) => {
 
   if (!current) { return }
+
+  const primaryColorHexA = (alpha: number) => {
+    return `hsla(${Array.from(sound.accountId || '').reduce((sum, char) => sum + char.charCodeAt(0), 0) % 360}deg, 90%, 55%, ${alpha})` 
+  }
+
+  const primaryColorHex = primaryColorHexA(1)
 
   const ctx = current.getContext('2d')
   if (!ctx) { return }
@@ -107,17 +112,17 @@ const renderFrames = ({
 
   if (gradient) {
     let grad = ctx.createLinearGradient(0, 0, width, 0)
-    if (!scheduled) { grad.addColorStop(stopFacs[0], `${primaryColorHex}00`) }
+    if (!scheduled) { grad.addColorStop(stopFacs[0], primaryColorHexA(0)) }
     grad.addColorStop(stopFacs[1], primaryColorHex)
     grad.addColorStop(stopFacs[2], primaryColorHex)
-    grad.addColorStop(stopFacs[3], `${primaryColorHex}00`)
+    grad.addColorStop(stopFacs[3], primaryColorHexA(0))
     ctx.fillStyle = grad
 
     grad = ctx.createLinearGradient(0, 0, width, 0)
-    if (!scheduled) { grad.addColorStop(stopFacs[0], `${primaryColorHex}33`) }
+    if (!scheduled) { grad.addColorStop(stopFacs[0], primaryColorHexA(0.44)) }
     grad.addColorStop(stopFacs[1], primaryColorHex)
     grad.addColorStop(stopFacs[2], primaryColorHex)
-    grad.addColorStop(stopFacs[3], `${primaryColorHex}44`)
+    grad.addColorStop(stopFacs[3], primaryColorHexA(0.44))
     ctx.strokeStyle = grad
   }
 
@@ -149,12 +154,12 @@ const renderFrames = ({
 
     if (gradient) {
       let grad = ctx.createLinearGradient(0, 0, width, 0)
-      grad.addColorStop(1 + stopFacs[0] - stopFacs[1], `${primaryColorHex}00`)
+      grad.addColorStop(1 + stopFacs[0] - stopFacs[1], primaryColorHexA(0))
       grad.addColorStop(1, primaryColorHex)
       ctx.fillStyle = grad
 
       grad = ctx.createLinearGradient(0, 0, width, 0)
-      grad.addColorStop(1 + stopFacs[0] - stopFacs[1], `${primaryColorHex}33`)
+      grad.addColorStop(1 + stopFacs[0] - stopFacs[1], primaryColorHexA(0.33))
       grad.addColorStop(1, primaryColorHex)
       ctx.strokeStyle = grad
     }

@@ -36,7 +36,7 @@ const checkAccountAvailable = new CheckAccountAvailable()
 
 const Validation = {
 
-  validatePassword(pass: string): string[] {
+  validatePassword(pass?: string): string[] {
     const errors = []
     if (!pass) { return [] }
     pass = pass.trim() 
@@ -47,7 +47,7 @@ const Validation = {
     return errors
   },
 
-  validateEmail(email: string): string[] {
+  validateEmail(email?: string): string[] {
     const errors = []
     if (!email) { return [] }
     email = email.trim() 
@@ -56,17 +56,22 @@ const Validation = {
     return errors
   },
 
-  validateNickname(nick: string): string[] {
+  validateNickname(nick?: string): string[] {
     const errors = []
-    if (nick.trim()) {
+    if (nick && nick.trim()) {
       if (nick.length > 25) { errors.push('nickname must be less than 25 characters') }
     }
     return errors
   },
 
-  checkAccountAvailable(email: string): Promise<string[]> {
-    return new Promise(resolve => {
+  checkAccountAvailable(email?: string): Promise<string[]> {
+    return new Promise<string[]>(resolve => {
       const errors: string[] = []
+      if (!email) {
+        resolve([]) 
+        return
+      }
+
       checkAccountAvailable.validate(email) /* this will noop with pending is true */
 
       /* 
@@ -82,21 +87,24 @@ const Validation = {
     })
   },
 
-  validateSessionName(name: string): string[] {
+  validateSessionName(name?: string): string[] {
     const errors = []
+    if (!name) { return [] }
     if (name && name.length < 8) { errors.push('Session name must be 8 characters or longer') }
     if (Validation.validateSafeText(name).length) { errors.push( 'Session name can only contain alphanumeric characters, underscores, spaces, and dashes') }
     return errors
   },
 
-  validateSafeText(text: string): string[] {
+  validateSafeText(text?: string): string[] {
     const errors = []
+    if (!text) { return [] }
     if (/[^\w -]/g.test(text)) { errors.push( 'Text can only contain alphanumeric characters, underscores, spaces, and dashes') }
     return errors
   },
 
-  validateNumeric(input: string): string[] {
+  validateNumeric(input?: string): string[] {
     const errors = []
+    if (!input) { return [] }
     if (isNaN(Number(input))) { errors.push( 'Input must be a number' ) }
     return errors
   }

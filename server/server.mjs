@@ -295,7 +295,7 @@ app.get('/auth-sessions', (req, res) => {
   }
   output += '\naccount-auths\n'
   for (const [ key, value ] of accountAuthMap.entries()) {
-    output += `${key}: ${value ? 'client connected' : ''}`
+    output += `${key}: ${value ? 'client connected' : ''}\n`
   }
   res.status(200).write(output, () => { res.end() })
 })
@@ -685,7 +685,12 @@ function handleSocketResponse(mId, res, containerId) {
     const token = accountAuthMap.get(connectedAccount)
     const authSessionObj = authSessionMap.get(token)
     if (authSessionObj?.client) {
-      authSessionObj.client.send(`jam:${mId}:${JSON.stringify(res)}`) 
+      try {
+        authSessionObj.client.send(`jam:${mId}:${JSON.stringify(res)}`) 
+      } catch (err) {
+        /* websocket might already be closed */
+        delete authSessionObj.client
+      }
     }
     if (connectedAccount === ownerAccount) { foundOwner = true }
   }
@@ -694,7 +699,12 @@ function handleSocketResponse(mId, res, containerId) {
     const token = accountAuthMap.get(ownerAccount)
     const authSessionObj = authSessionMap.get(token)
     if (authSessionObj?.client) {
-      authSessionObj.client.send(`jam:${mId}:${JSON.stringify(res)}`) 
+      try {
+        authSessionObj.client.send(`jam:${mId}:${JSON.stringify(res)}`) 
+      } catch (err)  {
+        /* websocket might already be closed */
+        delete authSessionObj.client
+      }
     }
   }
 }
@@ -735,18 +745,17 @@ app.put('/session/create', useAuth(async (req, res, auth) => {
 }))
 
 app.post('/session/find', useAuth(async (req, res, auth) => {
-  const { id } = auth
-  const { name } = req.body
+  const { title, sessionId, accountId } = req.body
 
   try {
-    const results = await sessionOps.findSessions({ name, accountId: id })
+    const results = await sessionOps.findSessions({ title, sessionId, accountId })
     res.status(200).json({ success: true, sessions: results })
   } catch (err) {
     res.status(400).json({ success: false, errors: [ err.message ] })
   }
 }))
 
-app.put('/session/join', useAuth(async (req, res, auth) => {
+app.post('/session/join', useAuth(async (req, res, auth) => {
   const { id } = auth
   const { sessionId } = req.body
 
@@ -756,8 +765,25 @@ app.put('/session/join', useAuth(async (req, res, auth) => {
   }
 
   try {
-    sessionOps.joinSession({ sessionId, accountId: id })
-    res.status(200).json({ success: true })
+    const sessionInfo = await sessionOps.joinSession({ sessionId, accountId: id })
+    res.status(200).json({ success: true, ...sessionInfo })
+  } catch (err) {
+    res.status(400).json({ success: false, errors: [ err.message ] })
+  }
+}))
+
+app.post('/session/leave', useAuth(async (req, res, auth) => {
+  const { id } = auth
+  const { sessionId } = req.body
+
+  if (!sessionId) { 
+    res.status(400).json({ success: false, errors: [ 'A session ID is required in order to leave a session' ] })
+    return 
+  }
+
+  try {
+    const sessionInfo = await sessionOps.leaveSession({ sessionId, accountId: id })
+    res.status(200).json({ success: true, ...sessionInfo })
   } catch (err) {
     res.status(400).json({ success: false, errors: [ err.message ] })
   }
@@ -863,8 +889,10 @@ app.get('/sessions/:sessionId/stream/download/:fileId', useAuth(async (req, res)
 
 }))
 
-app.post('/processor/*', (req, res) => {
-  const proxyReq = http.request(`${FFMPEG_URL}/${req.params[0]}`, {
+app.all('/waves/*', (req, res) => {
+  const targetUrl = req.url.slice('/waves/'.length)
+  const proxyReq = http.request(`${FFMPEG_URL}/${targetUrl}`, {
+    method: req.method,
     headers: req.headers,
     ...req
   }, proxyRes => {

@@ -1,5 +1,6 @@
 import LoopNode from './loop_node'
 import Evt from './evt'
+import UID from './uid'
 
 export interface SoundParams {
   uid?: string
@@ -13,7 +14,10 @@ export interface SoundParams {
   muted?: boolean
   soloed?: boolean
   fromParent?: boolean
+  frames?: Frames
   ms?: number
+  audioBuffer?: AudioBuffer
+  canEdit?: boolean
 }
 
 export type Frames = Array<{
@@ -30,6 +34,7 @@ class Sound extends Evt {
   soloed = false
   fromParent = false
   accountId?: string
+  canEdit = false
   ownerNode?: LoopNode
   /* the sound file */
   file?: File
@@ -50,6 +55,26 @@ class Sound extends Evt {
     super ()
 
     Object.assign(this, params)
+  }
+  
+  copy(newUid = false) {
+    return new Sound({
+      uid: newUid ? UID.hex(24) : this.uid,
+      name: this.name,
+      gain: this.gain,
+      pan: this.pan,
+      ownerNode: this.ownerNode,
+      stops: this.stops.slice(),
+      accountId: this.accountId,
+      ms: this.ms,
+      file: this.file,
+      frames: this.frames?.slice(),
+      muted: this.muted,
+      soloed: this.soloed,
+      fromParent: this.fromParent,
+      audioBuffer: this.audioBuffer,
+      canEdit: this.canEdit
+    })
   }
 
   getDefaultStops(): number[] {

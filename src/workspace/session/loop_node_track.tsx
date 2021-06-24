@@ -5,7 +5,7 @@ import Transport from '../../client/sound_transport'
 
 import { useEffect, useState, Fragment } from 'react'
 
-import { IconButton, Fab } from '@material-ui/core'
+import { IconButton, Fab, Button } from '@material-ui/core'
 
 import Knob from '../../comps/knob'
 
@@ -30,9 +30,46 @@ const useStyles = makeStyles({
     minHeight: 'var(--track-height)',
     minWidth: trackHeight,
     backgroundColor: 'var(--lt-grey)',
-    display: 'flex',
-    justifyContent: 'space-around',
-    alignItems: 'center'
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gridTemplateRows: '16px 1fr 1fr',
+    justifyItems: 'center',
+    alignItems: 'center',
+    '&.transport': {
+      gridTemplateRows: '1fr'
+    },
+    '&.disabled': {
+      gridTemplateRows: '1fr'
+    },
+    '& > .label': {
+      gridColumn: '1 / -1',
+      fontSize: '14px',
+      overflow: 'hidden'
+    },
+    '& .MuiButton-root': {
+      minWidth: 'unset',
+      height: '100%',
+      width: '100%',
+      fontWeight: 'bold', 
+      '&.solo': {
+        color: 'var(--grey)',
+        '&.enabled': {
+          color: 'var(--lt-yellow)',
+          textShadow: '0 0 2px black, 0 0 12px var(--lt-yellow)'
+        }
+      },
+      '&.mute': {
+        color: 'var(--grey)',
+        gridColumn: '1 / -1',
+        border: '1px solid var(--grey)',
+        maxHeight: '3em',
+        '&.enabled': {
+          backgroundColor: 'var(--red)',
+          border: '1px solid var(--red)',
+          color: 'white'
+        }
+      }
+    }
   },
   trackLane: {
     overflow: 'hidden',
@@ -58,7 +95,7 @@ const useStyles = makeStyles({
         fill: 'var(--d-primary)'
       }
     },
-    '&:hover svg.edit-sound': {
+    '&:hover svg.edit-sound:not(.disabled)': {
       opacity: 1,
       pointerEvents: 'all',
       transform: 'translate3d(0, 0, 0)'
@@ -96,6 +133,9 @@ function TrackView({
 
   const [ gainValue, setGainValue ] = useState(sound?.gain ?? 1)
   const [ panValue, setPanValue ] = useState(sound?.pan ?? 0)
+  const [ muted, setMuted ] = useState(sound?.muted ?? false)
+  const [ soloed, setSoloed ] = useState(sound?.muted ?? false)
+  const [ soundName, setSoundName ] = useState(sound?.name)
   const [ , setStops ] = useState(sound?.stops?.slice() || [])
 
   useEffect(() => {
@@ -115,15 +155,27 @@ function TrackView({
       setStops(stops)
     }
 
+    const onSetMuted = ({ muted }: { muted: boolean }) => {
+      setMuted(muted)
+    }
+
+    const onSetSoloed = ({ soloed }: { soloed: boolean }) => {
+      setSoloed(soloed)
+    }
+
     sound?.on('set-pan', onSetPan)
     sound?.on('set-gain', onSetGain)
     sound?.on('set-sound-stops', onSetSoundStops)
+    sound?.on('set-muted', onSetMuted)
+    sound?.on('set-soloed', onSetSoloed)
     transport.on('set-play-state', onSetPlayState)
 
     return () => {
       sound?.un('set-pan', onSetPan)
       sound?.un('set-gain', onSetGain)
       sound?.un('set-sound-stops', onSetSoundStops)
+      sound?.un('set-muted', onSetMuted)
+      sound?.un('set-soloed', onSetSoloed)
       transport.un('set-play-state', onSetPlayState)
     }
   }, [ sound, transport ])
@@ -162,29 +214,57 @@ function TrackView({
     return sound.pan
   }
 
+  const handleOnMute = () => {
+    if (!sound) { return }
+    transport.toggleSoundMuted({ sound })
+  }
+
+  const handleOnSolo = () => {
+    if (!sound) { return }
+    transport.toggleSoundSoloed({ sound })
+  }
+
   return (
     <Fragment>
       { !transportControls &&
         <div 
           className={ classes.trackControls + `${disabled ? ' disabled' : ''}` }
         >
-          <Knob 
-            value={ gainValue } 
-            onChanging={ handleOnGainSet }
-            onReset={ handleOnGainReset }
-          />
-          <Knob 
-            min={ -1 }
-            max = { 1 } 
-            value={ panValue } 
-            onChanging={ handleOnPanSet }
-            onReset={ handleOnPanReset }
-          />
+          <div className="label">
+            { sound ? sound.name : '' }
+          </div>
+          {
+            !disabled &&
+            [
+              <Knob 
+                key="gain"
+                value={ gainValue } 
+                onChanging={ handleOnGainSet }
+                onReset={ handleOnGainReset }
+              />,
+              <Knob 
+                key="pan"
+                min={ -1 }
+                max = { 1 } 
+                value={ panValue } 
+                onChanging={ handleOnPanSet }
+                onReset={ handleOnPanReset }
+              />,
+              <Button
+                key="mute"
+                className={ `mute ${muted ? 'enabled' : ''}` }
+                onClick={ handleOnMute }
+                variant="outlined"
+              >
+              MUTE
+              </Button>
+            ]
+          }
         </div>
       }
       { transportControls &&
         <div 
-          className={ classes.trackControls + `${disabled ? ' disabled' : ''}`  }
+          className={ classes.trackControls + ` transport ${disabled ? ' disabled' : ''}`  }
         >
           <IconButton onClick={ handleOnStop }>
             <StopIcon/> 
@@ -220,7 +300,7 @@ function TrackView({
             />,
             <EditSoundIcon
               key="edit"
-              className="edit-sound"
+              className={ `edit-sound ${ sound.canEdit ? '' : 'disabled'} ` }
               onClick={ handleOnEditSound }
             />
           ]

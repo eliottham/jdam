@@ -29,9 +29,12 @@ class Transport extends Evt implements ITransport {
     pan: StereoPannerNode
   }>()
   activeSources = new Map<AudioBufferSourceNode, GainNode>()
+  /* a set of exclusions to NOT play EVER, by sound UID */
+  exclusions = new Set<string>()
   loopLength = -1
   loopTimerId = -1
   loopStart = 0
+  /* map an offset value to a transport to sync with */
   syncs = new Map<Transport, number>()
 
   constructor({ sounds = [], audioCtx }: TransportParams) {
@@ -50,9 +53,13 @@ class Transport extends Evt implements ITransport {
 
   }
 
-  setSoundStops({ sound, stops }: { sound: Sound, stops: number[] }) {
-    if (!sound) { return }
+  setSoundName({ sound, name }: { sound: Sound, name: string }) {
+    sound.name = name
+    this.fire('set-sound-name', { sound, name })
+    sound.fire('set-sound-name', { sound, name })
+  }
 
+  setSoundStops({ sound, stops }: { sound: Sound, stops: number[] }) {
     if (this.playState !== 'stopped') {
       this.stop()
     }
@@ -89,7 +96,7 @@ class Transport extends Evt implements ITransport {
     sound.gain = gain
     const nodes = this.audioNodeMap.get(sound)
     if (nodes?.gain) {
-      nodes.gain.gain.setValueAtTime(gain, 0)
+      nodes.gain.gain.setValueAtTime(gain * (sound.muted ? 0 : 1), 0)
     }
     this.fire('set-gain', { sound, gain })
     sound.fire('set-gain', { sound, gain })
@@ -112,6 +119,25 @@ class Transport extends Evt implements ITransport {
   
   resetSoundPan({ sound }: { sound: Sound }) {
     this.setSoundPan({ sound, pan: 0 })
+  }
+
+  setSoundMuted({ sound, muted = false }: { sound: Sound, muted?: boolean }) {
+    sound.muted = muted 
+    sound.fire('set-muted', { sound, muted })
+    this.setSoundGain({ sound, gain: sound.gain })
+  }
+
+  toggleSoundMuted({ sound }: { sound: Sound, muted?: boolean }) {
+    this.setSoundMuted({ sound, muted: !sound.muted }) 
+  }
+
+  setSoundSoloed({ sound, soloed = false }: { sound: Sound, soloed?: boolean }) {
+    sound.soloed = soloed 
+    sound.fire('set-soloed', { sound, soloed })
+  }
+
+  toggleSoundSoloed({ sound }: { sound: Sound, soloed?: boolean }) {
+    this.setSoundSoloed({ sound, soloed: !sound.soloed }) 
   }
 
   setSoundFile({ 
@@ -196,6 +222,8 @@ class Transport extends Evt implements ITransport {
     offset?: number,
     audioCtx?: AudioContext
   }) {
+    if (this.exclusions.has(sound.uid)) { return }
+
     const nodes = this.audioNodeMap.get(sound)
     if (!nodes) { return }
 
@@ -228,7 +256,7 @@ class Transport extends Evt implements ITransport {
 
     pan.pan.setValueAtTime(sound.pan, 0)
 
-    gain.gain.setValueAtTime(sound.gain, 0)
+    gain.gain.setValueAtTime(sound.gain * (sound.muted ? 0 : 1), 0)
 
     const source = audioCtx.createBufferSource()
     source.buffer = audioBuffer
@@ -358,6 +386,13 @@ class Transport extends Evt implements ITransport {
     queue(offset)
   }
 
+  setExclusions({ soundUids }: { soundUids: string[] }) {
+    this.exclusions.clear()
+    for (const soundUid of soundUids) {
+      this.exclusions.add(soundUid) 
+    }
+  }
+
   setPlayState(state: string, offset = 0) {
     if (this.playState === 'stopped' &&
         state === 'stopped' && 
@@ -372,7 +407,6 @@ class Transport extends Evt implements ITransport {
 
     if (this.audioCtx.state === 'suspended') { this.audioCtx.resume() }
 
-    const lastState = this.playState
     this.playState = state
     this.fire('set-play-state', { playState: state })
 
@@ -406,6 +440,7 @@ class Transport extends Evt implements ITransport {
       }
 
       this.activeSources.clear()
+      this.exclusions.clear()
 
       /* this is the only difference between the two functions */
       if (this.playState === 'stopped') {
@@ -417,6 +452,7 @@ class Transport extends Evt implements ITransport {
     } 
 
     for (const [ transport, offset ] of this.syncs) {
+      transport.setExclusions({ soundUids: this.sounds.map(sound => sound.uid) })
       transport.setPlayState(this.playState, Math.max(0, offset + this._getLoopStart()))
     }
 

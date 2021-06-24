@@ -405,6 +405,16 @@ class JdamClient extends Evt {
     }
   }
 
+  getSessionFromUrl() {
+    const { pathname } = window.location
+    if (!pathname) { return }
+
+    const testRegex = /\/sessions\/([A-Fa-f0-9]{12})/
+    if (!testRegex.test(pathname)) { return }
+
+    return testRegex.exec(pathname)?.[1]?.toLowerCase()
+  }
+
   async accountInfo() {
     if (!this.account.id ) { return {} }
     try {
@@ -430,10 +440,21 @@ class JdamClient extends Evt {
             }))
           }
           this.fire('set-sessions', { sessions: this.getSessions() })
+          /* after loading sessions, check whether the url is in the list */
+
         }
+
         this.fire('account-info', {
           account: this.account
         })
+
+        const urlSessionId = this.getSessionFromUrl()
+        if (urlSessionId && !this.account.sessions.has(urlSessionId)) {
+          const sessions = await this.findSessions({ sessionId: urlSessionId })
+          if (sessions.length) {
+            this.fire('prompt-join-session-url', { sessionId: urlSessionId })
+          }
+        }
       }
     } catch (err) {
       /* do nothing */
@@ -557,7 +578,7 @@ class JdamClient extends Evt {
       const responseJson = await response.json()
       const { success, errors = [], title, description, accounts } = responseJson
       if (!success) {
-        this.fire('create-session', { success, errors: [ 'Could not join session' ].concat(errors) })
+        this.fire('join-session', { success, errors: [ 'Could not join session' ].concat(errors) })
         return
       }
       const newSession = new Session({ 
@@ -568,7 +589,65 @@ class JdamClient extends Evt {
         client: this
       })
       this.account.sessions.set(sessionId, newSession)
-      this.fire('create-session', { sessionId, newSession })
+      this.fire('join-session', { sessionId, newSession })
+      this.fire('set-sessions', { sessions: this.getSessions() })
+    } catch (err) {
+      /* do nothing */
+    }
+  }
+
+  async findSessions({ sessionId, title, accountId }: { sessionId?: string, title?: string, accountId?: string }) {
+    try {
+      const response = await fetch('/session/find', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          sessionId,
+          accountId,
+          title
+        })
+      })
+      const responseJson = await response.json()
+      const { success, errors = [], sessions } = responseJson
+      if (!success) {
+        this.fire('find-session', { success, errors })
+        return
+      }
+      this.fire('find-session', { sessions })
+      return sessions
+    } catch (err) {
+      /* do nothing */
+    }
+    return []
+  }
+
+  async joinSessionFromUrl() {
+    const sessionId = this.getSessionFromUrl()
+    if (!sessionId) { return }
+
+    return this.joinSession({ sessionId })
+  }
+
+  async leaveSession({ sessionId }: { sessionId: string }) {
+    if (!this.account.sessions.has(sessionId)) { return }
+    try {
+      const response = await fetch('/session/leave', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ sessionId })
+      })
+      const responseJson = await response.json()
+      const { success, errors = [] } = responseJson
+      if (!success) {
+        this.fire('leave-session', { success, errors: [ 'Could not leave session' ].concat(errors) })
+        return
+      }
+      this.account.sessions.delete(sessionId)
+      this.fire('leave-session', { sessionId })
       this.fire('set-sessions', { sessions: this.getSessions() })
     } catch (err) {
       /* do nothing */

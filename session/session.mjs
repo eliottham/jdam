@@ -6,6 +6,7 @@ import { Transform } from 'stream'
 import path from 'path'
 import crypto from 'crypto'
 import { paramParse } from 'jdam-utils'
+import http from 'http'
 const { MongoClient, ObjectID } = Mongo
 
 const PORT = 25052
@@ -19,6 +20,8 @@ const MONGO_DB_NAME = 'jdam'
 const PATTERN = JSON.parse(process.env.PATTERN || "[ 2, 1, 1, 1 ]")
 const BPM = Number(process.env.BPM || "120")
 const MEASURES = Number(process.env.MEASURES || "4")
+
+const FFMPEG_URL = `http://${NO_DOCKER ? 'localhost' : 'host.docker.internal'}:48000`
 
 const MAX_DEPTH = 4
 const MAX_WIDTH = 4
@@ -84,6 +87,15 @@ function getSounds() {
   })
 }
 
+function findSoundFile(fileId) {
+  const files = fs.readdirSync(path.resolve('./sounds'))
+
+  /* the first character is a dot; slice everything after that */
+  const fileType = path.extname(files.find(file => file.startsWith(fileId))).slice(1)
+  const resolvedPath = path.resolve(`./sounds/${fileId}.${fileType}`)
+  return resolvedPath
+}
+
 function beginSoundStream({ action, socket, fileId, fileType, length }) {
   const errors = []
   if (!fileId) {
@@ -117,7 +129,7 @@ function beginSoundStream({ action, socket, fileId, fileType, length }) {
 
   const monitor = new Transform({
     transform(chunk, encoding, callback) {
-      console.log(chunk.length)
+      // console.log(chunk.length)
       callback(null, chunk)
     }
   })
@@ -146,11 +158,8 @@ function beginSoundStream({ action, socket, fileId, fileType, length }) {
     })
     streamMeta.writeStream = writeStream
   } else if (action === 'download') {
-    const files = fs.readdirSync(path.resolve('./sounds'))
-
-    /* the first character is a dot; slice everything after that */
-    const fileType = path.extname(files.find(file => file.startsWith(fileId))).slice(1)
-    const resolvedPath = path.resolve(`./sounds/${fileId}.${fileType}`)
+    const resolvedPath = findSoundFile(fileId)
+    const fileType = path.extname(resolvedPath).slice(1)
     const readStream = fs.createReadStream(resolvedPath)
     readStream.on('error', (err) => {
       inProgressSoundStreams.delete(socket)
@@ -171,11 +180,18 @@ function beginSoundStream({ action, socket, fileId, fileType, length }) {
 
 async function addAccount(accountId) {
   const sessions = db.collection('sessions')
+  const accounts = db.collection('accounts')
 
-  await sessions.updateOne(
-    { _id: CONTAINER },
-    { '$addToSet': { accounts: ObjectID(accountId) }}
-  )
+  await Promise.all([
+    sessions.updateOne(
+      { _id: CONTAINER },
+      { '$addToSet': { accounts: ObjectID(accountId) }}
+    ),
+    accounts.updateOne(
+      { _id: ObjectID(accountId) },
+      { '$addToSet': { sessions: CONTAINER }}
+    )
+  ])
 
   connectedAccounts.add(accountId)
 }
@@ -301,7 +317,6 @@ function upsertSound(params = {}) {
     path
   }
 
-
   const result = {}
     
   if (existingSound) {
@@ -312,7 +327,7 @@ function upsertSound(params = {}) {
     }
   } else {
     sounds.set(uid, newSoundData)
-    result.insertedSound = { ...newSoundData, ownerNode: nodeUid }
+    result.addedSound = { ...newSoundData, ownerNode: nodeUid }
   }
 
   if (nodeUid) {
@@ -324,7 +339,21 @@ function upsertSound(params = {}) {
 
 function deleteSound(uid) {
   if (sounds.has(uid)) {
+    const existingSound = sounds.get(uid)
+
+    /* delete from global list and from the sound's owner node */
+    if (existingSound && existingSound.ownerNode) {
+      existingSound.ownerNode.sounds.delete(uid)
+    }
     sounds.delete(uid)
+    const resolvedPath = findSoundFile(uid)
+
+    /* remove sound file */
+    try {
+      fs.rmSync(resolvedPath)
+    } catch (err) {
+      console.error(Error("attempted to delete a file that isn't there"))
+    }
     return { deletedSound: uid }
   }
 }
@@ -534,7 +563,7 @@ async function begin() {
   const client = net.createConnection({ host: NO_DOCKER ? 'localhost' : 'host.docker.internal', port: 25051 }, () => { 
     client.write(CONTAINER)
   })
-
+  
   console.log(CONTAINER)
 
   /* 

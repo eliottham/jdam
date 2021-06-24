@@ -142,7 +142,6 @@ const useDialogStyles = makeStyles({
     },
     '& .MuiListItem-root': {
       border: '1px solid transparent',
-      borderWidth: '1px 1px 2px',
       borderRadius: 4,
       '&.selected': {
         position: 'relative',

@@ -12,10 +12,13 @@ class Metro extends Evt {
   /* cache this and noop if there is another attempt to load the same files */
   clickPrefixName = ''
 
-  _bpm = 120
-  _pattern = [ 2, 1, 1, 1 ]
+  bpm = 120
+  pattern = [ 2, 1, 1, 1 ]
   _loopTimerId = -1
-  _playing = false
+  playing = false
+  startTime = 0
+  beat = 0
+  activeSources = new Set<AudioBufferSourceNode>()
 
   audioCtx = new AudioContext()
 
@@ -25,7 +28,7 @@ class Metro extends Evt {
      * suffix is whether it is "high" or "low"
      */
     try {
-      const response = await fetch(`processor/clicks?name=${prefix}&type=${suffix}`, {
+      const response = await fetch(`/waves/clicks?name=${prefix}&type=${suffix}`, {
         method: 'GET'
       })
       const blob = await response.blob()
@@ -84,63 +87,62 @@ class Metro extends Evt {
     return [ clickHigh, clickLow ]
   }
   
-  previewMetro({ bpm = 120, pattern = [ 2, 1, 1, 1 ] }: PreviewParams) {
-    if (this.audioCtx.state === 'closed') { throw Error('audioCtx is already closed') }
+  queueMetroBeats() {
     if (!this.clickHigh || !this.clickLow) { throw Error('metro clicks are not loaded') }
-    let time = 0
-    const offset = 60 / bpm
-    for (const patternMark of pattern) {
+    const offset = 60 / this.bpm
+    for (const patternMark of this.pattern) {
       if (patternMark) {
         const bufferSource = this.audioCtx.createBufferSource()
         bufferSource.buffer = patternMark === 2 ? this.clickHigh : this.clickLow
         bufferSource.connect(this.audioCtx.destination)
-        bufferSource.start(this.audioCtx.currentTime + time)
+        bufferSource.start(this.startTime + offset * this.beat)
+        this.activeSources.add(bufferSource)
+        bufferSource.addEventListener('ended', () => {
+          this.activeSources.delete(bufferSource)
+        })
       }
-      time += offset
+      this.beat ++
     }
   }
 
-  previewMetroSet({ bpm = this._bpm, pattern = this._pattern }: PreviewParams) {
-    this._bpm = bpm
-    this._pattern = pattern
+  previewMetroSet({ bpm = this.bpm, pattern = this.pattern }: PreviewParams) {
+    this.bpm = bpm
+    this.pattern = pattern
   }
 
-  previewMetroStart({ bpm = this._bpm, pattern = this._pattern }: PreviewParams) {
+  previewMetroStart({ bpm = this.bpm, pattern = this.pattern }: PreviewParams) {
     this.previewMetroSet({ bpm, pattern })
 
-    if (this._playing) {
+    if (this.playing) {
       return
     }
 
-    this.audioCtx = new AudioContext()
-
-    this._playing = true
-    this.previewMetro({ bpm, pattern })
+    this.playing = true
+    this.startTime = this.audioCtx.currentTime
+    this.beat = 0
+    this.queueMetroBeats()
     const loop = () => {
       this._loopTimerId = window.setTimeout(() => {
         try {
-          this.previewMetro({ bpm: this._bpm, pattern: this._pattern })
+          this.queueMetroBeats()
           loop()
         } catch (err) {
           /* do nothing for now */
           this.previewMetroStop()
         }
-      }, this._pattern.length * (60 / this._bpm) * 1000)
+      }, this.pattern.length * (60 / this.bpm) * 1000)
     }
     loop()
     this.fire('metro-start', { bpm, pattern })
   }
 
   previewMetroStop() {
-    try {
-      if (this.audioCtx.state !== 'closed') {
-        this.audioCtx.close()
-      }
-    } catch (err) {
-      /* do nothing for now */
-    }
     window.clearTimeout(this._loopTimerId)
-    this._playing = false
+    for (const source of this.activeSources) {
+      source.stop()
+    }
+    this.activeSources.clear()
+    this.playing = false
     this.fire('metro-stop', {})
   }
 }
