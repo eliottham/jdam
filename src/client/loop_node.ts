@@ -77,6 +77,21 @@ class LoopNode extends Evt implements ITransport {
     return [ this, ...selectedNode.chain() ]
   }
 
+  /* useful for figuring out diffs between nodetrees */
+  flatMap(): Map<string, LoopNode> {
+    const result = new Map<string, LoopNode>()
+    const recurse = (node: LoopNode) => {
+      result.set(node.uid, node)
+      if (node.children.length) {
+        for (const child of node.children) {
+          recurse(child)
+        }
+      }
+    }
+    recurse(this)
+    return result
+  }
+
   inheritFrom(parent: LoopNode) {
     this.parent = parent 
   }

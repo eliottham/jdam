@@ -256,14 +256,20 @@ class Session extends Evt implements ITransport {
     } 
 
     if (params.root) {
+      /* only upate nodes that need to be updated */
+      const existingNodeSet = this.rootNode.flatMap()
+
       const rootTemplate = params.root
       const recurse = (nodeTemplate: GenericResponse, parent?: LoopNode): LoopNode => {
+        const existingNode = existingNodeSet.get(nodeTemplate.uid)
+
         const result = new LoopNode({
           session: this,
           uid: nodeTemplate.uid,
           sounds: nodeTemplate.sounds,
           parent
         })
+
         result.setChildren(nodeTemplate.children?.map((childTemplate: GenericResponse) => recurse(childTemplate, result)))
         return result
       }
