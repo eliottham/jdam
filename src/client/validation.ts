@@ -12,7 +12,7 @@ class CheckAccountAvailable extends Evt implements LatentValidation {
     if (!this.pending) {
       this.pending = true
       try {
-        const response = await fetch('account/available', {
+        const response = await fetch('/account/available', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

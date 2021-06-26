@@ -1,4 +1,5 @@
 const path = require('path')
+const fs = require('fs')
 const webpack = require('webpack')
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin')
 
@@ -51,10 +52,15 @@ module.exports = {
   devtool: 'source-map',
   devServer: {
     open: false,
-    host: 'localhost',
+    host: '0.0.0.0',
     contentBase: './public',
     writeToDisk: true,
     port: 4001,
-    clientLogLevel: 'error'
+    clientLogLevel: 'error',
+    https: {
+      key: fs.readFileSync('./jdam.key'),
+      cert: fs.readFileSync('./jdam.crt'),
+      ca: fs.readFileSync('/etc/ssl/certs/ca-certificates.crt'),
+    }
   }
 }

@@ -193,7 +193,7 @@ async function getAccount({ hash, id, email }) {
     account = await accounts.findOne({ email })
   }
   
-  if (account.sessions?.length) {
+  if (account?.sessions?.length) {
     const sessions = db.collection('sessions')
     const cursor = await sessions.find(
       { _id: { '$in': account.sessions }})
@@ -350,6 +350,7 @@ app.post('/account', async (req, res) => {
   }
 
   try { 
+    console.log(`creating account with creds ${email}, ${hash}. ${nickname}`)
     const accountResult = await createAccount({ email, hash, nickname })
     res.status(200).json({ success: true, account: accountResult })
   } catch (err) {

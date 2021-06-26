@@ -234,6 +234,7 @@ class JdamClient extends Evt {
                 })
                 this.account.sessions.set(sessionId, newSession)
                 this.fire('set-sessions', { sessions: this.getSessions() })
+                this.setActiveSession(sessionId)
                 return
               }
 
@@ -280,7 +281,16 @@ class JdamClient extends Evt {
         body: JSON.stringify({ email, hash, nickname: params.nickname })
       })
       const responseJson = await response.json()
-      this.fire('create-account', responseJson)
+      const { errors, account } = responseJson
+
+      if (errors) {
+	this.fire('create-account', { errors })
+      }
+
+      this.fire('create-account', account)
+
+      /* TODO: fix this arguments trashe */
+      this.logon(email, password)
     } catch (err) {
       /* do nothing */
     }
@@ -478,14 +488,15 @@ class JdamClient extends Evt {
     })
   }
 
-  async logon(email?: string, password?: string, suppressErrors?: boolean) {
+  async logon(email?: string, password?: string, suppressErrors?: boolean, hash = '') {
 
-    const encoder = new TextEncoder()
-    let hash = ''
-    const hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${password}`)))
+    if (!hash) {
+      const encoder = new TextEncoder()
+      const hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${password}`)))
 
-    if (email && password) { 
-      hash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), '')) 
+      if (email && password) { 
+	hash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), '')) 
+      }
     }
 
     try {
@@ -560,7 +571,6 @@ class JdamClient extends Evt {
         return
       }
       this.fire('create-session', { sessionId })
-      this.setActiveSession(sessionId)
     } catch (err) {
       /* do nothing */
     }

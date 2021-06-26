@@ -65,15 +65,49 @@ async function onSessionDisconnect({
 
 }
 
+function getIp(container) {
+  /* attempt to get session container's for it's IP address */
+  return new Promise((resolve, reject) => {
+    try {
+      exec(`docker inspect -f='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${container}`, (error, stdout, stderr) => {
+	if (error) { reject(error); return }
+	if (stderr.length) { reject(stderr); return }
+	resolve(`${stdout}`.trim())
+      })
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
+
+
 const sessionListener = net.createServer(socket => {
-  socket.once('data', data => {
+  socket.once('data', async data => {
     try {
       const sessionId = data.toString('utf8')
       const pendingSession = pendingSessions.get(sessionId)
       socket.end()
+      console.log(sessionId)
+      
 
       if (!pendingSession) { return }
-      const { accountId, ip, responseHandler } = pendingSession
+      const { accountId, db, responseHandler } = pendingSession
+
+      let { ip } = pendingSession
+      console.log('ip: ', ip)
+
+      if (!ip) {
+	console.log('no ip')
+	ip = await getIp(sessionId)
+	console.log('got ip: ', ip)
+      }
+
+      const sessions = db.collection('sessions')
+      await sessions.updateOne(
+	{ _id: sessionId },
+	{ '$set': { ip }}
+      )
+
       pendingSessions.delete(sessionId)
 
       const client = net.createConnection({ host: ip, port: 25052 }, () => { 
@@ -204,37 +238,10 @@ class SessionOps {
       })
     }
 
-    /* attempt to get session container's for it's IP address */
-    const getIp = (container) => {
-      return new Promise((resolve, reject) => {
-        try {
-          exec(`docker inspect -f docker inspect -f='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${container}`, (error, stdout, stderr) => {
-            if (error) { reject(error); return }
-            if (stderr.length) { reject(stderr); return }
-            resolve(stdout)
-          })
-        } catch (err) {
-          reject(err)
-        }
-      })
-    }
-
     const containerId = NO_DOCKER ? 'local-debug0' : await createContainer()
 
     /* on non-linux systems force the ip to localhost/127.0.0.1 */
     let ip = process.platform !== 'linux' ? '127.0.0.1' : ''
-    /* try to get IP for the next five seconds */
-    for (let a = 0; a < 10 && !ip; a++) {
-      try {
-        ip = await getIp(containerId)
-      } catch (err) {
-        /* do nothing */
-      }
-    }
-
-    if (!ip) {
-      throw Error('container ip was unable to be obtained')
-    }
 
     /* add the containerId to the account's session array in mongodb */
     const accounts = this.db.collection('accounts')

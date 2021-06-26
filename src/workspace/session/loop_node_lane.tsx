@@ -109,7 +109,7 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
         children.map((child, index)=> {
           return <LoopNodeView
             selected={ index === selectedNodeIndex }
-            key={ child.uid } 
+            key={ `${session.sessionId}-${child.uid}` } 
             node={ child }
             onSelect={ handleOnSelect }
             session={ session }
@@ -127,7 +127,7 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
       </div>
       { (!!selectedNode && depth + 1 < maxDepth) &&
         <LoopNodeLane
-          key={ `${selectedNodeIndex}-${selectedNode.uid}` }
+          key={ `${session.sessionId}-${selectedNodeIndex}-${selectedNode.uid}` }
           depth={ depth + 1 }
           rootNode={ selectedNode } 
           session={ session } 
