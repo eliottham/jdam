@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 
 import LoopNodeLane from './loop_node_lane'
+import SoundDrawer from './sounds_drawer'
+
 import { SoundEditorDialog } from './sound/sound_editor'
 import { PopupErrors } from '../../comps/comps'
 
@@ -10,18 +12,30 @@ import LoopNode from '../../client/loop_node'
 
 import { makeStyles } from '@material-ui/styles'
 
+import { IconButton } from '@material-ui/core'
+
+import { SoundListIcon } from '../../comps/icons'
+
 const useStyles = makeStyles({
   root: {
     height: '100%',
     width: '100%',
     overflowX: 'hidden',
-    overflowY: 'scroll'
+    overflowY: 'scroll',
+    position: 'relative'
   },
   popupLayer: {
     position: 'absolute',
     bottom: '0.5em',
     right: '0.5em',
     zIndex: 200
+  },
+  showSounds: {
+    '&.MuiIconButton-root': {
+      position: 'absolute',
+      top: 20,
+      left: 16
+    }
   }
 })
 
@@ -34,6 +48,8 @@ function SessionView({ session, setActive = false }: SessionViewProps): JSX.Elem
 
   const [ errors, setErrors ] = useState<string[]>([])
   const [ showErrors, setShowErrors ] = useState(false)
+  const [ rootNode, setRootNode ] = useState<LoopNode>(session.rootNode)
+  const [ showSounds, setShowSounds ] = useState(false)
 
   const [ editingSound, setEditingSound ] = useState<Sound>()
 
@@ -63,16 +79,22 @@ function SessionView({ session, setActive = false }: SessionViewProps): JSX.Elem
       setEditingSound(undefined)
     }
 
+    const onSetNodes = () => {
+      setRootNode(session.rootNode)
+    }
+
     session.on('errors', onError)
     session.on('edit-sound', onEditSound)
     session.on('cancel-edit-sound', onCancelEditSound)
     session.on('save-edit-sound', onCancelEditSound)
+    session.on('set-nodes', onSetNodes)
 
     return () => {
       session.un('errors', onError)
       session.un('edit-sound', onEditSound)
       session.un('cancel-edit-sound', onCancelEditSound)
       session.un('save-edit-sound', onCancelEditSound)
+      session.un('set-nodes', onSetNodes)
       window.clearTimeout(timeoutIndex)
     }
   }, [ session ])
@@ -87,14 +109,35 @@ function SessionView({ session, setActive = false }: SessionViewProps): JSX.Elem
     session.cancelEditSound()
   }
 
+  const handleOnCloseSoundsDrawer = () => {
+    setShowSounds(false)
+  }
+
+  const handleOnOpenSoundsDrawer = () => {
+    setShowSounds(true)
+  }
+
   return (
     <div className={ classes.root }>
-      <LoopNodeLane
-        depth={ 0 }
-        key="root-lane"
-        rootNode={ session.rootNode } 
-        session={ session } 
+      <IconButton
+        className={ classes.showSounds }
+        onClick={ handleOnOpenSoundsDrawer }
+      >
+        <SoundListIcon/>
+      </IconButton>
+      <SoundDrawer
+        open={ showSounds }
+        session={ session }
+        onClose={ handleOnCloseSoundsDrawer }
       />
+      { !!rootNode &&
+        <LoopNodeLane
+          depth={ 0 }
+          key="root-lane"
+          rootNode={ rootNode } 
+          session={ session } 
+        />
+      }
       <SoundEditorDialog
         open={ !!editingSound }
         onClose={ handleOnCloseSoundEditor }

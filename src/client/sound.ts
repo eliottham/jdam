@@ -1,13 +1,18 @@
-import LoopNode from './loop_node'
 import Evt from './evt'
 import UID from './uid'
+
+export type Frames = Array<{
+  min: number,
+  max: number,
+  ts?: number
+}>
 
 export interface SoundParams {
   uid?: string
   name?: string
   gain?: number
   pan?: number
-  ownerNode?: LoopNode
+  ownerNode?: string
   file?: File
   stops?: number[]
   accountId?: string
@@ -18,12 +23,8 @@ export interface SoundParams {
   ms?: number
   audioBuffer?: AudioBuffer
   canEdit?: boolean
+  canRecord?: boolean
 }
-
-export type Frames = Array<{
-  min: number,
-  max: number
-}>
 
 class Sound extends Evt {
   uid = ''
@@ -35,7 +36,8 @@ class Sound extends Evt {
   fromParent = false
   accountId?: string
   canEdit = false
-  ownerNode?: LoopNode
+  canRecord = false
+  ownerNode?: string
   /* the sound file */
   file?: File
   audioBuffer?: AudioBuffer
@@ -73,7 +75,8 @@ class Sound extends Evt {
       soloed: this.soloed,
       fromParent: this.fromParent,
       audioBuffer: this.audioBuffer,
-      canEdit: this.canEdit
+      canEdit: this.canEdit,
+      canRecord: this.canRecord
     })
   }
 

@@ -73,10 +73,13 @@ app.ws('/ws', ws => {
         try {
           const json = JSON.parse(data)
           const { token, sessionId } = json
-          checkAuth({ token })
+          try {
+            checkAuth({ token })
 
-          sessionOps.write(sessionId, mId, data)
-
+            sessionOps.write(sessionId, mId, data)
+          } catch (err) {
+            messageClient(ws, `ses:-1:${JSON.stringify({ expired: true })}`)
+          }
         } catch (err) {
           /* 
            * do nothing, the client is trashe if they think they can just NOT
@@ -115,6 +118,16 @@ async function managementLoop() {
   const now = Date.now()
   if ((now + 5000) % (60 * 2 * 1000) < 10000) {
     for (const [ key, value ] of authSessionMap.entries()) {
+      if (value.client) { 
+        if (value.client.readyState !== WebSocket.OPEN) {
+          /* clean out of session if socket has been closed */
+          if (value.id) { accountAuthMap.delete(value.id) }
+          authSessionMap.delete(key)
+          continue
+        } else {
+          messageClient(value.client, 'ses:-1:{"ping": true}') 
+        }
+      }
       if (now > value.expires) {
         if (value.client) { messageClient(value.client, `ses:-1:${JSON.stringify({ expired: true })}`) }
         if (value.id) { accountAuthMap.delete(value.id) }
@@ -350,7 +363,6 @@ app.post('/account', async (req, res) => {
   }
 
   try { 
-    console.log(`creating account with creds ${email}, ${hash}. ${nickname}`)
     const accountResult = await createAccount({ email, hash, nickname })
     res.status(200).json({ success: true, account: accountResult })
   } catch (err) {

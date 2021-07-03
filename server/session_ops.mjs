@@ -70,9 +70,9 @@ function getIp(container) {
   return new Promise((resolve, reject) => {
     try {
       exec(`docker inspect -f='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${container}`, (error, stdout, stderr) => {
-	if (error) { reject(error); return }
-	if (stderr.length) { reject(stderr); return }
-	resolve(`${stdout}`.trim())
+        if (error) { reject(error); return }
+        if (stderr.length) { reject(stderr); return }
+        resolve(`${stdout}`.trim())
       })
     } catch (err) {
       reject(err)
@@ -87,25 +87,21 @@ const sessionListener = net.createServer(socket => {
       const sessionId = data.toString('utf8')
       const pendingSession = pendingSessions.get(sessionId)
       socket.end()
-      console.log(sessionId)
       
 
       if (!pendingSession) { return }
       const { accountId, db, responseHandler } = pendingSession
 
       let { ip } = pendingSession
-      console.log('ip: ', ip)
 
       if (!ip) {
-	console.log('no ip')
-	ip = await getIp(sessionId)
-	console.log('got ip: ', ip)
+        ip = await getIp(sessionId)
       }
 
       const sessions = db.collection('sessions')
       await sessions.updateOne(
-	{ _id: sessionId },
-	{ '$set': { ip }}
+        { _id: sessionId },
+        { '$set': { ip }}
       )
 
       pendingSessions.delete(sessionId)
@@ -215,7 +211,7 @@ class SessionOps {
             '--network=jdam-net',
             `-d ${process.platform !== 'linux' ? '-p 25052:25052 -p 25053:25053 -p 9230:9230' : ''}`,
             `${process.platform !== 'linux' ? '' : '--add-host=host.docker.internal:host-gateway'}`,
-            // '--rm',
+            '--rm',
             `-e TITLE="${title}"`,
             `-e DESCRIPTION="${description}"`,
             `-e SESSION_LENGTH=${sessionLength}`,

@@ -1,5 +1,6 @@
 import { useRef, useEffect, CanvasHTMLAttributes } from 'react'
 import Sound from '../../../client/sound'
+import colorize from '../../../client/colorize'
 
 interface SoundVisualizationProps {
   sound: Sound,
@@ -31,10 +32,10 @@ const renderFrames = ({
   if (!current) { return }
 
   const primaryColorHexA = (alpha: number) => {
-    return `hsla(${Array.from(sound.accountId || '').reduce((sum, char) => sum + char.charCodeAt(0), 0) % 360}deg, 90%, 55%, ${alpha})` 
+    return colorize(sound.accountId, alpha)
   }
 
-  const primaryColorHex = primaryColorHexA(1)
+  const primaryColorHex = colorize(sound.accountId, 1)
 
   const ctx = current.getContext('2d')
   if (!ctx) { return }

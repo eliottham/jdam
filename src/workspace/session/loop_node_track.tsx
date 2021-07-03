@@ -8,6 +8,7 @@ import { useEffect, useState, Fragment } from 'react'
 import { IconButton, Fab, Button } from '@material-ui/core'
 
 import Knob from '../../comps/knob'
+import ChargeButton from '../../comps/charge_button'
 
 import { makeStyles } from '@material-ui/styles'
 
@@ -15,6 +16,7 @@ import PlayArrowIcon from '@material-ui/icons/PlayArrow'
 import StopIcon from '@material-ui/icons/Stop'
 import PauseIcon from '@material-ui/icons/Pause'
 import FiberManualRecordIcon from '@material-ui/icons/FiberManualRecord'
+import DeleteIcon from '@material-ui/icons/Delete'
 import { WaveformIcon, EditSoundIcon } from '../../comps/icons'
 
 const nodeWidth = 500
@@ -100,6 +102,37 @@ const useStyles = makeStyles({
       pointerEvents: 'all',
       transform: 'translate3d(0, 0, 0)'
     }
+  },
+  deleteButton: {
+    '&.charge-button': {
+      borderRadius: 4,
+      gridArea: 'trash',
+      color: 'cyan',
+      backgroundColor: 'var(--slt-grey)',
+      margin: '0 0.5em 0 auto',
+      padding: '0.5em',
+      transition: 'all 300ms var(--ease-out)',
+      boxShadow: '0 1px 2px 1px var(--lt-grey)',
+      '&.charge-button::before': {
+        backgroundColor: 'var(--red)'
+      },
+      '& svg': {
+        mixBlendMode: 'difference'
+      },
+      '&.charged svg': {
+        mixBlendMode: 'normal',
+        color: 'white',
+        zIndex: 100
+      },
+      '&.charged': {
+        transform: 'translate3d(0, -2px, 0)',
+        boxShadow: '0 3px 2px 1px var(--lt-grey)'
+      },
+      '&.disabled': {
+        opacity: 0.25,
+        pointerEvents: 'none'
+      }
+    }
   }
 })
 
@@ -117,6 +150,7 @@ interface TrackViewProps {
 }
 
 function TrackView({
+  node,
   sound,
   ms,
   disabled = false,
@@ -134,8 +168,6 @@ function TrackView({
   const [ gainValue, setGainValue ] = useState(sound?.gain ?? 1)
   const [ panValue, setPanValue ] = useState(sound?.pan ?? 0)
   const [ muted, setMuted ] = useState(sound?.muted ?? false)
-  const [ soloed, setSoloed ] = useState(sound?.muted ?? false)
-  const [ soundName, setSoundName ] = useState(sound?.name)
   const [ , setStops ] = useState(sound?.stops?.slice() || [])
 
   useEffect(() => {
@@ -159,15 +191,10 @@ function TrackView({
       setMuted(muted)
     }
 
-    const onSetSoloed = ({ soloed }: { soloed: boolean }) => {
-      setSoloed(soloed)
-    }
-
     sound?.on('set-pan', onSetPan)
     sound?.on('set-gain', onSetGain)
     sound?.on('set-sound-stops', onSetSoundStops)
     sound?.on('set-muted', onSetMuted)
-    sound?.on('set-soloed', onSetSoloed)
     transport.on('set-play-state', onSetPlayState)
 
     return () => {
@@ -175,7 +202,6 @@ function TrackView({
       sound?.un('set-gain', onSetGain)
       sound?.un('set-sound-stops', onSetSoundStops)
       sound?.un('set-muted', onSetMuted)
-      sound?.un('set-soloed', onSetSoloed)
       transport.un('set-play-state', onSetPlayState)
     }
   }, [ sound, transport ])
@@ -219,9 +245,8 @@ function TrackView({
     transport.toggleSoundMuted({ sound })
   }
 
-  const handleOnSolo = () => {
-    if (!sound) { return }
-    transport.toggleSoundSoloed({ sound })
+  const handleOnDeleteNode = () => {
+    node.delete()
   }
 
   return (
@@ -304,6 +329,14 @@ function TrackView({
               onClick={ handleOnEditSound }
             />
           ]
+        }
+        { transportControls &&
+          <ChargeButton
+            className={ `${classes.deleteButton} ${playState !== 'stopped' ? 'disabled' : ''}` }
+            onConfirm={ handleOnDeleteNode }
+          >
+            <DeleteIcon/>
+          </ChargeButton>
         }
       </div>
     </Fragment>

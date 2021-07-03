@@ -10,6 +10,7 @@ import CloseableDialog from '../../../comps/closeable_dialog'
 import BigAction from '../../../comps/big_action'
 import FormField from '../../../comps/form_field'
 import Validation from '../../../client/validation'
+import ChargeButton from '../../../comps/charge_button'
 
 import SoundVisualization from './sound_visualization'
 import StopHandle, { iconSize } from './stop_handle'
@@ -23,6 +24,7 @@ import PlayArrowIcon from '@material-ui/icons/PlayArrow'
 import StopIcon from '@material-ui/icons/Stop'
 import PauseIcon from '@material-ui/icons/Pause'
 import DeleteIcon from '@material-ui/icons/Delete'
+import FiberManualRecordIcon from '@material-ui/icons/FiberManualRecord'
 import { WaveformIcon } from '../../../comps/icons'
 
 const soundVisHeight = 256
@@ -39,7 +41,8 @@ const useStyles = makeStyles({
     gridTemplateRows: 'min-content min-content 1fr min-content',
     gridTemplateColumns: 'max-content auto',
     position: 'relative',
-    paddingTop: 24
+    padding: '24px 2px 2px',
+    overflow: 'hidden'
   },
   vis: {
     gridArea: 'vis',
@@ -91,10 +94,31 @@ const useStyles = makeStyles({
     }
   },
   deleteButton: {
-    '&.MuiIconButton-root': {
+    '&.charge-button': {
       borderRadius: 4,
       marginTop: 10,
-      gridArea: 'trash'
+      marginRight: 4,
+      minWidth: 126,
+      gridArea: 'trash',
+      color: 'cyan',
+      transition: 'all 300ms var(--ease-out)',
+      boxShadow: '0 1px 2px 1px var(--lt-grey)',
+      backgroundColor: 'var(--white)',
+      '&.charge-button::before': {
+        backgroundColor: 'var(--red)'
+      },
+      '& svg': {
+        mixBlendMode: 'difference'
+      },
+      '&.charged svg': {
+        mixBlendMode: 'normal',
+        color: 'white',
+        zIndex: 100
+      },
+      '&.charged': {
+        transform: 'translate3d(0, -2px, 0)',
+        boxShadow: '0 3px 2px 1px var(--lt-grey)'
+      }
     }
   },
   editor: {
@@ -175,8 +199,18 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
       onSetSoundName({ name: sound.name })
     }
 
+    const onStartRecording = () => {
+      /* TODO: something */
+    }
+
+    const onStopRecording = () => {
+      /* TODO: something */
+    }
+
     session._editorTransport.on('set-play-state', onSetPlayState)
     session._editorTransport.on('set-playhead', onSetPlayhead)
+    session._editorTransport.on('start-recording', onStartRecording)
+    session._editorTransport.on('stop-recording', onStopRecording)
     sound.on('set-sound-file', onSetSoundFile)
     sound.on('set-sound-stops', onSetSoundStops)
     sound.on('set-sound-name', onSetSoundName)
@@ -185,6 +219,8 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
     return () => {
       session._editorTransport.un('set-play-state', onSetPlayState)
       session._editorTransport.un('set-playhead', onSetPlayhead)
+      session._editorTransport.un('start-recording', onStartRecording)
+      session._editorTransport.un('stop-recording', onStopRecording)
       sound.un('set-sound-file', onSetSoundFile)
       sound.un('set-sound-stops', onSetSoundStops)
       sound.un('set-sound-name', onSetSoundName)
@@ -357,9 +393,16 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
         <IconButton onClick={ handleOnStop }>
           <StopIcon/> 
         </IconButton>
-        <IconButton onClick={ handleOnPlayPause }>
-          { playState === 'playing' ? <PauseIcon/> : <PlayArrowIcon/> }
-        </IconButton>
+        { !sound.canRecord &&
+          <IconButton onClick={ handleOnPlayPause }>
+            { playState === 'playing' ? <PauseIcon/> : <PlayArrowIcon/> }
+          </IconButton>
+        }
+        { sound.canRecord &&
+          <IconButton onClick={ handleOnPlayPause }>
+            <FiberManualRecordIcon/>
+          </IconButton>
+        }
       </div>
       <Button 
         variant="contained"
@@ -370,12 +413,12 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
         { existingSound ? 'SAVE' : 'UPLOAD' }
       </Button>
       { existingSound &&
-        <IconButton 
+        <ChargeButton
           className={ classes.deleteButton }
-          onClick={ handleDeleteSound }
+          onConfirm={ handleDeleteSound }
         >
           <DeleteIcon/>
-        </IconButton>
+        </ChargeButton>
       }
     </div>
   )
@@ -389,7 +432,7 @@ interface SoundEditorDialogProps {
   onClose: () => void
 }
 
-function SoundEditorDialog({ session, sound, open, ...props }: SoundEditorDialogProps): JSX.Element {
+function SoundEditorDialog({ session, sound, node, open, ...props }: SoundEditorDialogProps): JSX.Element {
 
   const classes = useStyles()
 
@@ -434,6 +477,10 @@ function SoundEditorDialog({ session, sound, open, ...props }: SoundEditorDialog
     }
   }
 
+  const handleOnRecord = () => {
+    session.editNewSound({ node, record: true })
+  }
+
   if (sound && session.sounds.has(sound.uid)) {
     return (
       <CloseableDialog
@@ -469,7 +516,10 @@ function SoundEditorDialog({ session, sound, open, ...props }: SoundEditorDialog
               onChange={ handleFileChange }
             />
           </BigAction>
-          <BigAction label="RECORD" onClick={ () => { setTabIndex(1) } }>
+          <BigAction label="RECORD" onClick={ () => { 
+            setTabIndex(1) 
+            handleOnRecord()
+          } }>
             <NoteIcon/>
           </BigAction>
         </>

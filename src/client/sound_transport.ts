@@ -1,7 +1,7 @@
 import Sound, { Frames } from './sound'
 import Evt from './evt'
 
-interface TransportParams {
+export interface TransportParams {
   sounds?: Sound[]
   audioCtx?: AudioContext
 }
@@ -80,8 +80,8 @@ class Transport extends Evt implements ITransport {
 
       if (index === 1) {
         sound.stops[0] = Math.min(sound.stops[0], resetStops[index])
-      } else if (index === 2) {
-        sound.stops[3] = Math.max(sound.stops[3], resetStops[index])
+      } else if (index === 3) {
+        sound.stops[2] = Math.max(sound.stops[3], resetStops[index])
       }
     } else {
       sound.stops = resetStops

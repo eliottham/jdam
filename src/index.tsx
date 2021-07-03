@@ -12,8 +12,8 @@ const jdamClient = new JdamClient()
 
 /* this is for debugging purposes only */
 window.jdamClient = jdamClient
-const username = localStorage.getItem('username') || 'jdam@x.com'
-const password = localStorage.getItem('password') || 'testpassword!'
+const username = localStorage.getItem('username') || undefined
+const password = localStorage.getItem('password') || undefined
 jdamClient.logon(username, password, true)
 
 ReactDOM.render(

@@ -170,6 +170,7 @@ function LoopNodeView({
   }
 
   const tracks = () => {
+    let alreadyUploaded = false
     const result = new Array<JSX.Element>()
     { inheritedSounds.forEach(sound =>  {
       result.push(
@@ -185,6 +186,8 @@ function LoopNodeView({
     }
     ) }
     { sounds.forEach(sound => {
+      /* wow I hate this */
+      alreadyUploaded = alreadyUploaded || sound.accountId === session.client.account.id
       result.push(
         <TrackView
           key={ sound.uid }
@@ -197,15 +200,17 @@ function LoopNodeView({
       )
     }
     ) }
-    result.push(
-      <TrackView 
-        key="placeholder"
-        node={ node } 
-        transport={ transport }
-        onEditSound={ handleOnEditSound }
-        placeholder={ true }
-      />
-    )
+    if (!alreadyUploaded) {
+      result.push(
+        <TrackView 
+          key="placeholder"
+          node={ node } 
+          transport={ transport }
+          onEditSound={ handleOnEditSound }
+          placeholder={ true }
+        />
+      )
+    }
     return result
   }
 

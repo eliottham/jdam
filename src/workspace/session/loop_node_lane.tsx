@@ -76,6 +76,9 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
       setMaxDepth(info.maxDepth)
     }
 
+    setChildren(rootNode.children)
+    setSelectedNodeIndex(rootNode.selectedNode)
+
     rootNode.on('set-children', onRootSetChildren)
     rootNode.on('set-selected-node', onSelectNode)
     session.on('set-info', onSetInfo)
