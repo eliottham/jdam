@@ -7,6 +7,15 @@ import Account from './account'
 
 export type AudioDeviceType = 'input' | 'output'
 
+export interface AudioDeviceDescriptor {
+  kind: string 
+  deviceId: string 
+  groupId: string 
+  label: string 
+  index?: number
+  selected?: boolean 
+}
+
 class ClientSettings extends Settings {
   inputs: MediaDeviceInfo[] = []
   outputs: MediaDeviceInfo[] = []
@@ -37,7 +46,7 @@ class ClientSettings extends Settings {
     this.fire('enum-audio-devices', { inputs, outputs })
   }
 
-  getDevices({ type }: { type: AudioDeviceType }) {
+  getDevices({ type }: { type: AudioDeviceType }): AudioDeviceDescriptor[] {
     const devices = type === 'input' ? this.inputs : this.outputs
     const result = []
     let index = 0
@@ -49,7 +58,7 @@ class ClientSettings extends Settings {
         label: device.label,
         index,
         selected: this.selectedInput === device.deviceId
-      })
+      } as AudioDeviceDescriptor)
       index ++
     }
     return result
@@ -205,8 +214,10 @@ class JdamClient extends Evt {
           case 'ses':
             try {
               const rjson = JSON.parse(data)
-              const { expired, loggedOff } = rjson
-              if (expired === true || loggedOff === true) {
+              const { expired, loggedOff, ping } = rjson
+              if (ping) {
+                this.wsSend('ses', 'pong')
+              } else if (expired === true || loggedOff === true) {
                 this.fire('logoff', rjson)
               }
             } catch (err) {
@@ -234,6 +245,7 @@ class JdamClient extends Evt {
                 })
                 this.account.sessions.set(sessionId, newSession)
                 this.fire('set-sessions', { sessions: this.getSessions() })
+                this.setActiveSession(sessionId)
                 return
               }
 
@@ -280,7 +292,16 @@ class JdamClient extends Evt {
         body: JSON.stringify({ email, hash, nickname: params.nickname })
       })
       const responseJson = await response.json()
-      this.fire('create-account', responseJson)
+      const { errors, account } = responseJson
+
+      if (errors) {
+        this.fire('create-account', { errors })
+      }
+
+      this.fire('create-account', account)
+
+      /* TODO: fix this arguments trashe */
+      this.logon(email, password)
     } catch (err) {
       /* do nothing */
     }
@@ -431,13 +452,15 @@ class JdamClient extends Evt {
             /* don't overwrite existing sessions */
             if (this.account.sessions.has(sessionId)) { continue }
 
-            this.account.sessions.set(sessionId, new Session({ 
+            const newSession = new Session({ 
               title,
               description,
               sessionId,
               accounts,
               client: this
-            }))
+            })
+
+            this.account.sessions.set(sessionId, newSession)
           }
           this.fire('set-sessions', { sessions: this.getSessions() })
           /* after loading sessions, check whether the url is in the list */
@@ -478,14 +501,15 @@ class JdamClient extends Evt {
     })
   }
 
-  async logon(email?: string, password?: string, suppressErrors?: boolean) {
+  async logon(email?: string, password?: string, suppressErrors?: boolean, hash = '') {
 
-    const encoder = new TextEncoder()
-    let hash = ''
-    const hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${password}`)))
+    if (!hash) {
+      const encoder = new TextEncoder()
+      const hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${password}`)))
 
-    if (email && password) { 
-      hash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), '')) 
+      if (email && password) { 
+        hash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), '')) 
+      }
     }
 
     try {
@@ -511,8 +535,12 @@ class JdamClient extends Evt {
     }
   }
 
-  bounce() {
-    fetch('/bounce', { method: 'GET' })
+  async bounce() {
+    const response = await fetch('/bounce', { method: 'GET' })
+    const responseJson = await response.json()
+    if (!responseJson.success) {
+      this.fire('logoff', responseJson)
+    }
   }
 
   async logoff() {
@@ -560,7 +588,6 @@ class JdamClient extends Evt {
         return
       }
       this.fire('create-session', { sessionId })
-      this.setActiveSession(sessionId)
     } catch (err) {
       /* do nothing */
     }
@@ -591,6 +618,7 @@ class JdamClient extends Evt {
       this.account.sessions.set(sessionId, newSession)
       this.fire('join-session', { sessionId, newSession })
       this.fire('set-sessions', { sessions: this.getSessions() })
+      newSession.getNodes()
     } catch (err) {
       /* do nothing */
     }
@@ -665,13 +693,20 @@ class JdamClient extends Evt {
       return
     }
 
+    this.getActiveSession()?.stop()
+
     const session = this.account.sessions.get(sessionId)
-    if (!session) return
+    if (!session) { return }
 
     this.activeSession = sessionId
     this.fire('active-session', { sessionId, session })
 
-    session.getNodes()
+    if (!session.loadedNodes) {
+      session.getNodes()
+    } else {
+      session.fire('set-nodes', { root: session.rootNode })
+      session.routeChain({})
+    }
   }
 
   getActiveSession() {

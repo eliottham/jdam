@@ -6,6 +6,7 @@ import UID from './uid'
 import Metro from './metro'
 import Sound, { SoundParams, Frames } from './sound'
 import Transport, { ITransport } from './sound_transport'
+import SoundRecorder from './sound_recorder'
 
 export interface SessionSettingsParams {
   setting1: string
@@ -50,6 +51,7 @@ interface SessionInfo {
  */
 class Session extends Evt implements ITransport {
   rootNode = new LoopNode({ uid: 'root-node', session: this })
+  loadedNodes = false
 
   info = {
     maxWidth: 4,
@@ -105,8 +107,7 @@ class Session extends Evt implements ITransport {
       this.audioCtx = audioCtx
     }
 
-    this.transport =  new Transport({ audioCtx: this.audioCtx })
-    this._editorTransport = new Transport({ audioCtx: this.audioCtx })
+    this.transport = new Transport({ audioCtx: this.audioCtx })
 
     this.masterGain = this.audioCtx.createGain()
     this.masterGain.connect(this.audioCtx.destination)
@@ -119,6 +120,7 @@ class Session extends Evt implements ITransport {
       this.fire('set-playhead', params)
     })
 
+    this._editorTransport = new Transport({ audioCtx: this.audioCtx })
     this._editorTransport.sync(this.transport)
 
   }
@@ -256,19 +258,31 @@ class Session extends Evt implements ITransport {
     } 
 
     if (params.root) {
+      /* only upate nodes that need to be updated */
+      const existingNodeSet = this.rootNode.flatMap()
+
       const rootTemplate = params.root
       const recurse = (nodeTemplate: GenericResponse, parent?: LoopNode): LoopNode => {
-        const result = new LoopNode({
-          session: this,
-          uid: nodeTemplate.uid,
-          sounds: nodeTemplate.sounds,
-          parent
-        })
+        let result = existingNodeSet.get(nodeTemplate.uid)
+
+        if (result) {
+          /* this is really the only thing that would need updating */
+          result.setSounds(nodeTemplate.sounds)
+        } else {
+          result = new LoopNode({
+            session: this,
+            uid: nodeTemplate.uid,
+            sounds: nodeTemplate.sounds,
+            parent
+          })
+        }
+
         result.setChildren(nodeTemplate.children?.map((childTemplate: GenericResponse) => recurse(childTemplate, result)))
         return result
       }
       const newRoot = recurse(rootTemplate)
       this.rootNode.setChildren(newRoot.children)
+      this.loadedNodes = true
       this.fire('set-nodes', { root: this.rootNode })
       this.routeChain({})
     } 
@@ -299,8 +313,27 @@ class Session extends Evt implements ITransport {
        * remove from children of correct parent
        */
       const { node: targetNode } = this.findNode(deletedNode.uid)
+
+      const recurse = (node: LoopNode) => {
+        /* go through every child and clear sound owner nodes */
+        for (const sound of node.sounds) {
+          const existingSound = this.sounds.get(sound)
+          if (existingSound) {
+            delete existingSound.ownerNode
+            node.fire('assign-sound', { assignedSound: sound, toNode: undefined })
+          }
+        }
+        if (node.children.length) {
+          for (const child of node.children) {
+            recurse(child)
+          }
+        }
+      }
+
       if (targetNode) {
         targetNode.parent?.deleteChild(targetNode)
+        recurse(targetNode)
+        this.fire('set-sounds', { sounds: Array.from(this.sounds.values()) })
       }
       this.fire('delete-node', { deletedNode: targetNode })
       this.fire('set-nodes', { root: this.rootNode })
@@ -325,8 +358,6 @@ class Session extends Evt implements ITransport {
       const existingSound = this.sounds.get(uid)
 
       if (existingSound) {
-        /* 'ownerNode' from the response is a string */
-        delete soundParams.ownerNode
         Object.assign(existingSound, soundParams)
         this.fire('update-sound', { sound: existingSound })
         existingSound.fire('update-sound', { sound: existingSound })
@@ -355,16 +386,27 @@ class Session extends Evt implements ITransport {
         this.downloadSoundFile(uid)
 
         this.fire('add-sound', { sound })
-        this.fire('set-sounds', { sounds: Array.from(this.sounds.values()) })
       }
-    } 
+
+      this.fire('set-sounds', { sounds: Array.from(this.sounds.values()) })
+    }
 
     if (params.assignedSound && params.toNode) {
       const { assignedSound, toNode, fromNode } = params
       const { node: targetNode } = this.findNode(toNode)
       const sound = this.sounds.get(assignedSound.uid)
+
+      const updateChildNodes = (node: LoopNode, targetNode?: LoopNode) => {
+        node.fire('assign-sound', { assignedSound: sound, toNode: targetNode })
+        if (node.children.length) {
+          for (const child of node.children) {
+            updateChildNodes(child)
+          }
+        }
+      }
+
       if (sound && targetNode) {
-        sound.ownerNode = targetNode
+        sound.ownerNode = targetNode.uid
         targetNode.sounds.add(sound.uid)
         /* 
          * TODO: this needs to move in to the node object, but "assignSound" is
@@ -379,19 +421,21 @@ class Session extends Evt implements ITransport {
         }
 
         /* also continue down the chain and update child nodes */
-        const updateChildNodes = (node: LoopNode) => {
-          node.fire('assign-sound', { assignedSound: sound, toNode: targetNode })
-          if (node.children.length) {
-            for (const child of node.children) {
-              updateChildNodes(child)
-            }
-          }
-        }
-        updateChildNodes(targetNode)
+        updateChildNodes(targetNode, targetNode)
 
         this.fire('assign-sound', { assignedSound: sound, toNode: targetNode })
         this.routeChain({})
+      } else if (sound && !targetNode) {
+        /* target node may be undefined if unassigning the sound */
+        if (sound.ownerNode) {
+          const { node: ownerNode } = this.findNode(sound.ownerNode)
+          if (ownerNode) { updateChildNodes(ownerNode) }
+          delete sound.ownerNode
+          this.fire('assign-sound', { assignedSound: sound, toNode: undefined })
+        }
       }
+
+      this.fire('set-sounds', { sounds: Array.from(this.sounds.values()) })
     } 
 
     if (params.uploadedSoundFile) {
@@ -406,9 +450,13 @@ class Session extends Evt implements ITransport {
       const { deletedSound } = params
       if (this.sounds.has(deletedSound)) {
         const existingSound = this.sounds.get(deletedSound)
-        if (existingSound) {
-          existingSound.ownerNode?.sounds.delete(existingSound.uid)
-          existingSound.ownerNode?.fire('delete-sound', { sound: existingSound })
+        if (existingSound?.ownerNode) {
+          const { node: ownerNode } = this.findNode(existingSound.ownerNode)
+          if (ownerNode) {
+            ownerNode.sounds.delete(existingSound.uid)
+            ownerNode.fire('delete-sound', { sound: existingSound })
+            ownerNode.fire('set-sounds', { sounds: ownerNode.getSounds() })
+          }
         }
         this.sounds.delete(deletedSound)
         this.fire('delete-sound', { sound: existingSound })
@@ -447,7 +495,7 @@ class Session extends Evt implements ITransport {
           gain: sound.gain,
           pan: sound.pan,
           accountId: sound.accountId,
-          nodeUid: sound.ownerNode?.uid,
+          nodeUid: sound.ownerNode,
           stops: sound.stops
         }
       }
@@ -538,23 +586,43 @@ class Session extends Evt implements ITransport {
     }
   }
 
-  editSound({ node, sound = this._editingSound }: { node?: LoopNode, sound?: Sound}) {
+  editSound({ node, sound = this._editingSound, record = false }: { node?: LoopNode, sound?: Sound, record?: boolean }) {
     if (!sound) {
       this._editingSound = new Sound({
         uid: UID.hex(24),
         name: `New Sound ${this.sounds.size + 1}`,
         gain: 1,
         pan: 0,
-        ownerNode: node,
+        ownerNode: node?.uid,
         stops: [],
         accountId: this.client.account.id,
-        canEdit: true
+        canEdit: true,
+        canRecord: record
       })
     } else {
       if (!sound.canEdit) { return }
       this._editingSound = sound
+      this._editingSound.canRecord = record
       this._editingSoundInit = sound.copy()
     }
+
+    if (record) {
+      this._editorTransport = new SoundRecorder({
+        metro: this.metro,
+        sounds: [ this._editingSound ],
+        measures: this.info.measures,
+        audioCtx: this.audioCtx,
+        deviceId: this.client.settings.getSelectedDevice({ type: 'input' })?.deviceId || 'default'
+      })
+      this._editorTransport.sync(this.transport, this.metro.getPatternLength())
+      this._editorTransport.once('stop-recording', ({ file }: { file: File }) => {
+        this.processAndConvertSoundFile({ sound: this._editingSound, file })
+      })
+    } else {
+      this._editorTransport = new Transport({ audioCtx: this.audioCtx })
+      this._editorTransport.sync(this.transport)
+    }
+    this._editorTransport.setLoopLength({ loopLength: this.info.ms })
 
     /* cram the current sound in to the transport and set the playhead back to 0 */
     this.transport.stop()
@@ -568,9 +636,9 @@ class Session extends Evt implements ITransport {
     this.fire('edit-sound', { sound: this._editingSound, newSound: !this.sounds.has(this._editingSound.uid) }) 
   }
 
-  editNewSound({ node }: { node?: LoopNode }) {
+  editNewSound({ node, record = false }: { node?: LoopNode, record?: boolean }) {
     /* force a new editing sound to be created */
-    this.editSound({ node, sound: undefined })
+    this.editSound({ node, record, sound: undefined })
   }
 
   cancelEditSound() {
@@ -591,11 +659,12 @@ class Session extends Evt implements ITransport {
   async saveEditSound() {
     const sound = this._editingSound
 
-    if (!sound || !sound.ownerNode || !sound.file) { 
+    if (!sound || !sound.file) { 
       this.cancelEditSound()
       return 
     }
 
+    const existingSound = this.sounds.get(sound.uid)
     this._editingSound = undefined
     this._editingSoundInit = undefined
     this.transport.setSounds({ sounds: [] })
@@ -616,7 +685,8 @@ class Session extends Evt implements ITransport {
      * edits to an existing sound will also be automatically handled
      */
     this.upsertSound(sound)
-    if (sound.file) {
+    if (!existingSound?.file) {
+      /* upload the sound file if the existing sound doesn't have one */
       await this.uploadSoundFile({ file: sound.file, soundUid: sound.uid })
     }
     this.fire('save-edit-sound', { sound }) 
@@ -625,7 +695,7 @@ class Session extends Evt implements ITransport {
   async deleteEditSound() {
     const sound = this._editingSound
 
-    if (!sound || !sound.ownerNode || !sound.file) { 
+    if (!sound || !sound.file) { 
       this.cancelEditSound()
       return 
     }

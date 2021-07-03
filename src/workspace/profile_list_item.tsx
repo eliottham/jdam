@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react'
+
 import JdamClient from '../client/jdam_client'
+import Account from '../client/account'
+
+import AccountSettingsDialog from './account_settings_dialog'
+
 import {
   ListItem,
   ListItemAvatar,
@@ -7,15 +12,14 @@ import {
   Avatar,
   IconButton
 } from '@material-ui/core'
-import SettingsIcon from '@material-ui/icons/Settings'
-import AccountSettingsDialog from './account_settings_dialog'
-import Account from '../client/account'
 
-function ProfileListItem(props: { client: JdamClient }) {
+import SettingsIcon from '@material-ui/icons/Settings'
+
+function ProfileListItem({ client }: { client: JdamClient }) {
   
-  const [ email, setEmail ] = useState(props.client.account.email)
-  const [ nickname, setNickname ] = useState(props.client.account.nickname)
-  const [ avatarId, setAvatarId ] = useState(props.client.account.avatarId)
+  const [ email, setEmail ] = useState(client.account.email)
+  const [ nickname, setNickname ] = useState(client.account.nickname)
+  const [ avatarId, setAvatarId ] = useState(client.account.avatarId)
   const [ openAccountSettings, setOpenAccountSettings ] = useState(false)
 
   const handleOnOpenAccountSettings = () => {
@@ -33,12 +37,12 @@ function ProfileListItem(props: { client: JdamClient }) {
       setAvatarId(account.avatarId)
     }
 
-    props.client.on('account-info', onAccountInfo)
+    client.on('account-info', onAccountInfo)
 
     return () => {
-      props.client.un('account-info', onAccountInfo)
+      client.un('account-info', onAccountInfo)
     }
-  }, [])
+  }, [ client ])
 
   const extraProps = {} as { src?: string }
   if (avatarId) {
@@ -57,7 +61,7 @@ function ProfileListItem(props: { client: JdamClient }) {
       <AccountSettingsDialog
         open={ openAccountSettings }
         onClose={ handleOnCloseAccountSettings }
-        client={ props.client }
+        client={ client }
         email={ email }
         nickname={ nickname }
         avatarId={ avatarId }

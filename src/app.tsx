@@ -100,11 +100,11 @@ const loginFieldTemplates = createAccountFieldTemplates.slice(0, 2).map(temp => 
   return newTemp
 }) 
 
-function LoginDialog( props: LoginDialogProps): JSX.Element {
+function LoginDialog( { open, onSubmit, client, tabIndex: tabInd, errors, showErrors }: LoginDialogProps): JSX.Element {
 
   const classes = useStyles()
 
-  const [ tabIndex, setTabIndex ] = useState(props.tabIndex ?? 0)
+  const [ tabIndex, setTabIndex ] = useState(tabInd ?? 0)
   /* keep track of field values for submission */
   const [ formFields, setFormFields ] = useState<{ [index: string]: string }>({ email: '', password: '', nickname: '' })
 
@@ -136,14 +136,14 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
       }
     }
 
-    props.client.on('logon', onLogon)
-    props.client.on('create-account', onCreateAccount)
+    client.on('logon', onLogon)
+    client.on('create-account', onCreateAccount)
 
     return () => {
-      props.client.un('logon', onLogon)
-      props.client.un('create-account', onCreateAccount)
+      client.un('logon', onLogon)
+      client.un('create-account', onCreateAccount)
     }
-  })
+  }, [ client ])
 
   const tabChange = (index: number) => {
     /* reset fields when switching back to the LOGIN tab */
@@ -158,7 +158,7 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
   }
 
   const handleSubmit = () => {
-    props.onSubmit({
+    onSubmit({
       email: formFields['email'],
       password: formFields['password'],
       nickname: formFields['nickname'],
@@ -169,7 +169,7 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
   return (
     <Dialog
       className={ classes.loginDialog }
-      open={ props.open }
+      open={ open }
     >
       <div className="splash flex-center" style={ { flexDirection: "column", color: "white" } }>
         <div style={ { fontSize: "2rem", marginBottom: "24px" } }>JDAM</div>
@@ -194,8 +194,8 @@ function LoginDialog( props: LoginDialogProps): JSX.Element {
         </div>
         <div style={ { margin: '0 1em' } }>
           <PopupErrors
-            errors={ props.errors }
-            showErrors={ props.showErrors }
+            errors={ errors }
+            showErrors={ showErrors }
           />
         </div>
         <Button 

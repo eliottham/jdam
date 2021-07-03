@@ -1,8 +1,9 @@
 import Evt from './evt'
 
-type PreviewParams = {
+export interface MetroPreviewParams {
   bpm?: number
   pattern?: number[] 
+  destination?: AudioNode
 }
 
 class Metro extends Evt {
@@ -21,6 +22,21 @@ class Metro extends Evt {
   activeSources = new Set<AudioBufferSourceNode>()
 
   audioCtx = new AudioContext()
+  destination: AudioNode
+
+  constructor(params?: MetroPreviewParams) {
+    super()
+
+    if (params) {
+      Object.assign(this, params)
+    }
+
+    this.destination = params?.destination || this.audioCtx.destination
+  }
+
+  getPatternLength() {
+    return this.pattern.length * (60 / this.bpm) * 1000
+  }
 
   async getClick(prefix: string, suffix: string) {
     /* 
@@ -94,7 +110,7 @@ class Metro extends Evt {
       if (patternMark) {
         const bufferSource = this.audioCtx.createBufferSource()
         bufferSource.buffer = patternMark === 2 ? this.clickHigh : this.clickLow
-        bufferSource.connect(this.audioCtx.destination)
+        bufferSource.connect(this.destination)
         bufferSource.start(this.startTime + offset * this.beat)
         this.activeSources.add(bufferSource)
         bufferSource.addEventListener('ended', () => {
@@ -105,12 +121,12 @@ class Metro extends Evt {
     }
   }
 
-  previewMetroSet({ bpm = this.bpm, pattern = this.pattern }: PreviewParams) {
+  previewMetroSet({ bpm = this.bpm, pattern = this.pattern }: MetroPreviewParams) {
     this.bpm = bpm
     this.pattern = pattern
   }
 
-  previewMetroStart({ bpm = this.bpm, pattern = this.pattern }: PreviewParams) {
+  previewMetroStart({ bpm = this.bpm, pattern = this.pattern }: MetroPreviewParams) {
     this.previewMetroSet({ bpm, pattern })
 
     if (this.playing) {
@@ -130,7 +146,7 @@ class Metro extends Evt {
           /* do nothing for now */
           this.previewMetroStop()
         }
-      }, this.pattern.length * (60 / this.bpm) * 1000)
+      }, this.getPatternLength())
     }
     loop()
     this.fire('metro-start', { bpm, pattern })

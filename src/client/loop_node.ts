@@ -26,11 +26,19 @@ class LoopNode extends Evt implements ITransport {
     if (parent) { this.inheritFrom(parent) }
     if (session) { this.session = session }
     if (sounds) {
+      this.setSounds(sounds)
+    }
+    this.uid = uid
+  }
+
+  setSounds(sounds?: string[]) {
+    this.sounds.clear()
+    if (sounds) {
       for (const sound of sounds) {
         this.sounds.add(sound)
       }
     }
-    this.uid = uid
+    this.fire('set-sounds', { sounds: this.getSounds() })
   }
 
   getSound(uid: string) {
@@ -75,6 +83,21 @@ class LoopNode extends Evt implements ITransport {
     const selectedNode = this.getSelectedNode()
     if (!selectedNode) { return [ this ] }
     return [ this, ...selectedNode.chain() ]
+  }
+
+  /* useful for figuring out diffs between nodetrees */
+  flatMap(): Map<string, LoopNode> {
+    const result = new Map<string, LoopNode>()
+    const recurse = (node: LoopNode) => {
+      result.set(node.uid, node)
+      if (node.children.length) {
+        for (const child of node.children) {
+          recurse(child)
+        }
+      }
+    }
+    recurse(this)
+    return result
   }
 
   inheritFrom(parent: LoopNode) {
@@ -162,6 +185,10 @@ class LoopNode extends Evt implements ITransport {
   }
 
   getPlayState() { return this.session?.getPlayState() || 'stopped' }
+
+  delete() {
+    this.session?.deleteNode({ uid: this.uid })
+  }
 
 }
 

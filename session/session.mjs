@@ -284,8 +284,25 @@ function deleteNode({ uid }) {
     throw Error('Node UID not found in nodes')
   }
 
+  /* go through every child and clear sound owner nodes */
+  const recurse = (node) => {
+    for (const sound of node.sounds) {
+      const existingSound = sounds.get(sound)
+      if (existingSound) {
+        delete existingSound.ownerNode
+      }
+    }
+    if (node.children.length) {
+      for (const child of node.children) {
+        recurse(child)
+      }
+    }
+  }
+  
+  recurse(node)
+
   const indexOf = node.parent.children.indexOf(node)
-  node.parent.children.slice(indexOf, 1)
+  node.parent.children.splice(indexOf, 1)
 
   return { deletedNode: abbreviateNode(node) }
 }
@@ -293,6 +310,7 @@ function deleteNode({ uid }) {
 function upsertSound(params = {}) {
 
   if (typeof params !== 'object') { throw Error('params must be an object') }
+
 
   const { 
     nodeUid,
@@ -320,18 +338,37 @@ function upsertSound(params = {}) {
   const result = {}
     
   if (existingSound) {
+    /* 
+     * allow account to update an existingSound, but only if that existingSound
+     * has the same ownerNode already as the updated version
+     */
+    if (existingSound.ownerNode?.uid !== nodeUid &&
+      nodeUid &&
+      accountId &&
+      !checkAssignmentAllowed({ accountId, nodeUid })) {
+      throw Error('accountId cannot assign another sound to this node')
+    }
+
+    delete params.nodeUid
+
     Object.assign(existingSound, params)
     result.updatedSound = { ...existingSound }
     if (existingSound.ownerNode) {
       result.updatedSound.ownerNode = existingSound.ownerNode.uid
     }
+
   } else {
+    /* check if the account is trying to assign another sound to the same node */
+    if (accountId && !checkAssignmentAllowed({ accountId, nodeUid })) {
+      throw Error('accountId cannot assign another sound to this node')
+    }
+
     sounds.set(uid, newSoundData)
     result.addedSound = { ...newSoundData, ownerNode: nodeUid }
   }
 
   if (nodeUid) {
-    Object.assign(result, assignSoundToNode({ nodeUid, soundUid: uid }))
+    Object.assign(result, assignSoundToNode({ accountId, nodeUid, soundUid: uid }))
   }
 
   return result
@@ -358,12 +395,41 @@ function deleteSound(uid) {
   }
 }
 
-function assignSoundToNode({ nodeUid, soundUid }) {
+function checkAssignmentAllowed({ accountId, nodeUid }) {
+
+  /* 
+   * check the destination node for whether the accountId is allowed to upload
+   * a sound to it
+   */
+  if (!nodeUid) { return true }
+
+  const { node } = findNode(nodeUid)
+  if (!node) { return true }
+  
+  let allowed = true
+  for (const soundUid of node.sounds) {
+    const sound = sounds.get(soundUid)
+    if (sound.accountId === accountId) {
+      allowed = false
+      break
+    }
+  }
+  return allowed
+}
+
+function assignSoundToNode({ accountId, nodeUid, soundUid }) {
   const sound = sounds.get(soundUid)
   if (!sound) { throw Error('sound not found') }
 
   const { node } = findNode(nodeUid)
   if (!node) { throw Error('node not found') }
+
+  /* noop if sound is already assigned to targetNode */
+  if (sound.ownerNode?.uid === nodeUid) { return {} }
+  
+  if (accountId && !checkAssignmentAllowed({ accountId, nodeUid })) {
+    throw Error('accountId cannot assign another sound to this node')
+  }
 
   const result = {}
   if (sound?.ownerNode && sound.ownerNode.uid !== nodeUid) {
@@ -476,7 +542,11 @@ const sessionServer = net.createServer(socket => {
       try {
         const json = JSON.parse(data.slice(splitIndex + 1))
         const { req } = json
-        processRequest(mId, req, socket)
+        try {
+          processRequest(mId, req, socket)
+        } catch (err) {
+          socket.write(response(mId, { error: err.message }))
+        }
       } catch (err) {
         socket.write(response(mId, { error: 'not json' }))
       }

@@ -4,7 +4,8 @@ import {
   Button,
   DialogProps,
   List,
-  ListItem
+  ListItem,
+  CircularProgress
 } from '@material-ui/core'
 
 import MicIcon from '@material-ui/icons/Mic'
@@ -20,8 +21,7 @@ import SettingsIcon from '@material-ui/icons/Settings'
 
 import { makeStyles } from '@material-ui/styles'
 
-import JdamClient, { AudioDeviceType } from '../client/jdam_client'
-import Session from '../client/session'
+import JdamClient, { AudioDeviceType, AudioDeviceDescriptor } from '../client/jdam_client'
 
 import CloseableDialog from '../comps/closeable_dialog'
 
@@ -132,12 +132,17 @@ const useDialogStyles = makeStyles({
       padding: '1em',
       flexDirection: 'row',
       '& > .column': {
+        minWidth: 500,
         padding: '1em',
         '& > .title': {
           fontSize: '1.5rem',
           borderBottom: '1px solid var(--lt-grey)',
           paddingBottom: 8
         }
+      },
+      '& .MuiCircularProgress-root': {
+        display: 'block',
+        margin: 'auto'
       }
     },
     '& .MuiListItem-root': {
@@ -160,16 +165,22 @@ function DeviceSelectionDialog({ client, open, ...props }: DeviceSelectionDialog
   const classes = useDialogStyles()
 
   const [ selectedInput, setSelectedInput ] = useState(client.settings.selectedInput)
-  const [ selectedOutput, setSelectedOutput ] = useState(client.settings.selectedOutput)
+  const [ inputs, setInputs ] = useState<AudioDeviceDescriptor[]>(client.settings.getDevices({ type: 'input' }))
 
   useEffect(() => {
     const onSelectDevice = ({ type, deviceId }: { type: AudioDeviceType, deviceId: string}) => {
-      type === 'input' ? setSelectedInput(deviceId) : setSelectedOutput(deviceId)
+      if (type === 'input') { setSelectedInput(deviceId) }
+    }
+
+    const onEnumAudioDevices = ({ inputs }: { inputs: MediaDeviceInfo[] }) => {
+      setInputs(inputs)
     }
 
     client.settings.on('set-selected-device', onSelectDevice)
+    client.settings.on('enum-audio-devices', onEnumAudioDevices)
     return () => {
       client.settings.un('set-selected-device', onSelectDevice)
+      client.settings.un('enum-audio-devices', onEnumAudioDevices)
     }
   }, [ client ])
 
@@ -190,7 +201,7 @@ function DeviceSelectionDialog({ client, open, ...props }: DeviceSelectionDialog
         <div className="title">Inputs</div>
         <List>
           {
-            client.settings.getDevices({ type: 'input' }).map(info => {
+            inputs.map(info => {
               return (
                 <ListItem 
                   key={ info.deviceId }
@@ -203,24 +214,8 @@ function DeviceSelectionDialog({ client, open, ...props }: DeviceSelectionDialog
               )
             })
           }
-        </List>
-      </div>
-      <div className="column">
-        <div className="title">Outputs</div>
-        <List>
-          {
-            client.settings.getDevices({ type: 'output' }).map(info => {
-              return (
-                <ListItem 
-                  key={ info.deviceId }
-                  button={ true }
-                  className={ selectedOutput === info.deviceId ? 'selected' : '' }
-                  onClick={ handleOnSelect('output', info.deviceId) }
-                >
-                  { info.label }
-                </ListItem>
-              )
-            })
+          { !inputs.length &&
+            <CircularProgress />
           }
         </List>
       </div>
