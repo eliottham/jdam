@@ -36,6 +36,20 @@ const useStyles = makeStyles({
       width: 0,
       flex: 1,
       borderLeft: '2px dashed var(--primary)'
+    },
+    '&.playhead': {
+      '& > .line': {
+        borderLeft: '2px solid var(--lt-blue)'
+      },
+      '& > svg': {
+        position: 'absolute',
+        bottom: -(iconSize - 1),
+        stroke: 'var(--lt-blue)',
+        fill: 'var(--lt-blue)',
+        height: iconSize,
+        width: iconSize,
+        transform: 'rotate(180deg)'
+      }
     }
   }
 })
@@ -45,7 +59,7 @@ interface StopHandleProps {
   totalWidth?: number
   min?: number
   max?: number
-  type: 'samplestart' | 'fadeinend' | 'fadeoutstart' | 'sampleend'
+  type: 'samplestart' | 'fadeinend' | 'fadeoutstart' | 'sampleend' | 'playhead'
   onChanging?: (initValue: number, newValue: number) => void
   onChanged?: (initValue: number, newValue: number) => void
   onReset?: () => number
@@ -81,6 +95,7 @@ function StopHandle({
       return <TriRightSmallIcon/>
     case 'fadeoutstart':
       return <TriLeftSmallIcon/>
+    case 'playhead':
     default:
       return <CircleSmallIcon/>
     }
@@ -111,7 +126,7 @@ function StopHandle({
   return (
     <Draggable
       ref={ ref }
-      className={ classes.root }
+      className={ `${classes.root} ${type}` }
       onChanging={ handleOnChanging }
       onChanged={ handleOnChanged }
       onReset={ handleOnReset }

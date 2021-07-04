@@ -131,6 +131,7 @@ class LoopNode extends Evt implements ITransport {
     this.children.splice(indexOf, 1)
     this.fire('delete-child', { child, node: this })
     this.fire('set-children', { node: this, children: this.children })
+    this.setSelectedNode(Math.max(0, Math.min(indexOf, this.children.length - 1)))
   }
 
   getSelectedNode() {

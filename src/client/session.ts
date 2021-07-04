@@ -335,6 +335,7 @@ class Session extends Evt implements ITransport {
         recurse(targetNode)
         this.fire('set-sounds', { sounds: Array.from(this.sounds.values()) })
       }
+
       this.fire('delete-node', { deletedNode: targetNode })
       this.fire('set-nodes', { root: this.rootNode })
       this.routeChain({})
@@ -606,6 +607,7 @@ class Session extends Evt implements ITransport {
       this._editingSoundInit = sound.copy()
     }
 
+    const previousTransport = this._editorTransport
     if (record) {
       this._editorTransport = new SoundRecorder({
         metro: this.metro,
@@ -614,14 +616,11 @@ class Session extends Evt implements ITransport {
         audioCtx: this.audioCtx,
         deviceId: this.client.settings.getSelectedDevice({ type: 'input' })?.deviceId || 'default'
       })
-      this._editorTransport.sync(this.transport, this.metro.getPatternLength())
-      this._editorTransport.once('stop-recording', ({ file }: { file: File }) => {
-        this.processAndConvertSoundFile({ sound: this._editingSound, file })
-      })
     } else {
       this._editorTransport = new Transport({ audioCtx: this.audioCtx })
-      this._editorTransport.sync(this.transport)
     }
+    previousTransport.shallowCopyEvents(this._editorTransport)
+    this._editorTransport.sync(this.transport)
     this._editorTransport.setLoopLength({ loopLength: this.info.ms })
 
     /* cram the current sound in to the transport and set the playhead back to 0 */
@@ -654,6 +653,30 @@ class Session extends Evt implements ITransport {
     this._editorTransport.stop()
     this._editorTransport.setSounds({ sounds: [] })
     this.fire('cancel-edit-sound', { sound }) 
+  }
+
+  startRecording() {
+    this._editorTransport.stop()
+    if (this._editorTransport.playState !== 'recording') {
+      this._editorTransport.leadIn(this.metro.getPatternLength())
+      this._editorTransport.setPlayState('recording')
+      this._editorTransport.once('stop-recording', ({ file }: { file: File }) => {
+        this._editorTransport.sync(this.transport)
+        this.processAndConvertSoundFile({ sound: this._editingSound, file })
+      })
+    }
+  }
+
+  stopRecording() {
+    this._editorTransport.stop()
+  }
+
+  toggleRecording() {
+    if (this._editorTransport.playState !== 'recording') {
+      this.startRecording()
+    } else {
+      this.stopRecording()
+    }
   }
 
   async saveEditSound() {

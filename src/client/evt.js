@@ -1,5 +1,7 @@
 const ANY_NAME = '!ANY'
 
+const emptyFn = () => { /* do nothing */ }
+
 class Evt {
   constructor() {
     Object.defineProperty(this, 'listeners', {
@@ -8,27 +10,47 @@ class Evt {
     })
   }
 
+  shallowCopyEvents(target, ...evtNames) {
+    if (evtNames) {
+      for (const evtName of evtNames) {
+        const existingListeners = this.listeners.get(evtName)
+        if (!existingListeners) { continue }
+        target.listeners.set(evtName, existingListeners)
+      }
+    } else {
+      for (const [ evtName, existingListeners ] of this.listeners) {
+        target.listeners.set(evtName, existingListeners)
+      }
+    }
+  }
+
   on(evtName, fn, scope) {
-    if (typeof evtName !== 'string') return
-    if (!evtName) return
+    if (typeof evtName !== 'string') { return emptyFn }
+    if (!evtName) { return emptyFn }
     let existingListeners = this.listeners.get(evtName)
     if (!existingListeners) {
       existingListeners = new Map()
       this.listeners.set(evtName, existingListeners)
     } 
     existingListeners.set(fn, {fn: fn, scope: scope})
+    return () => { 
+      this.un(evtName, fn)
+    }
   }
 
   /* this does not fire the event */
   once(evtName, fn, scope) {
-    if (typeof evtName !== 'string') return
-    if (!evtName) return
+    if (typeof evtName !== 'string') { return emptyFn }
+    if (!evtName) { return emptyFn }
     let existingListeners = this.listeners.get(evtName)
     if (!existingListeners) {
       existingListeners = new Map()
       this.listeners.set(evtName, existingListeners)
     } 
     existingListeners.set(fn, {scope: scope, once: true})
+    return () => { 
+      this.un(evtName, fn)
+    }
   }
 
   un(evtName, fn) {
