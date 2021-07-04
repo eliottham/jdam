@@ -2,7 +2,8 @@ import { BaseSyntheticEvent, useState, useEffect, useRef } from 'react'
 
 import Session from '../../../client/session'
 import LoopNode from '../../../client/loop_node'
-import Sound from '../../../client/sound'
+import Sound, { Frames } from '../../../client/sound'
+import Transport from '../../../client/sound_transport'
 
 import { NoteIcon } from '../../../comps/icons'
 import SlidingPageDialog from '../../../comps/sliding_page_dialog'
@@ -50,14 +51,6 @@ const useStyles = makeStyles({
     height: soundVisHeight,
     marginBottom: iconSize + 8,
     marginTop: 8,
-    '& .playhead': {
-      position: 'absolute',
-      top: 0,
-      bottom: 0,
-      left: 0,
-      width: 2,
-      backgroundColor: 'var(--lt-blue)'
-    },
     '& .sound-visualization': {
       position: 'absolute',
       height: '100%',
@@ -127,12 +120,19 @@ const useStyles = makeStyles({
       minHeight: 500,
       padding: '1em'
     }
+  },
+  recordButton: {
+    '&.recording.MuiIconButton-root': {
+      backgroundColor: 'var(--red)',
+      color: 'white'
+    }
   }
 })
 
 interface SoundEditorProps {
   sound: Sound
   session: Session
+  transport: Transport
 }
 
 const clipFromStops = (session: Session, sound: Sound): string => {
@@ -148,7 +148,7 @@ const clipFromStops = (session: Session, sound: Sound): string => {
   return `polygon(${points.join(',')})`
 }
 
-function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
+function SoundEditor({ sound, session, transport }: SoundEditorProps): JSX.Element {
   /*
    * show info about the file maybe
    *
@@ -165,22 +165,34 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
   const [ stops, setStops ] = useState<number[]>(sound.stops?.slice() || [])
   const [ clip, setClip ] = useState(clipFromStops(session, sound))
   const [ width, setWidth ] = useState(1)
-  const [ playhead, setPlayhead ] = useState(session._editorTransport.playhead)
-  const [ playState, setPlayState ] = useState(session._editorTransport.getPlayState()) 
-  const [ showHandles, setShowHandles ] = useState(!!sound.file)
+  const [ playhead, setPlayhead ] = useState(transport.playhead)
+  const [ playState, setPlayState ] = useState(transport.getPlayState()) 
+  const [ showHandles, setShowHandles ] = useState(!!sound.frames?.length)
   const [ soundName, setSoundName ] = useState(sound.name)
+  const [ frames, setFrames ] = useState(!!sound.frames?.length)
+  const [ soundMs, setSoundMs ] = useState(ms)
+  const [ recording, setRecording ] = useState(transport.playState === 'recording')
 
   useEffect(() => {
     const onSetSoundFile = ({ sound }: { sound: Sound }) => {
       setStops(sound.stops.slice())
-      setClip(clipFromStops(session, sound))
-      setShowHandles(!!sound.file)
+      setClip(clipFromStops(session, sound)),
+      setShowHandles(!!sound.frames?.length)
+    }
+
+    const onSetSoundFrames = ({ frames }: { frames: Frames }) => {
+      setFrames(!!frames.length)
+    }
+
+    const onSetSoundMs = ({ ms }: { ms: number }) => {
+      const msValue = Math.max((session.info.ms + 1000) || 0, ms || 0, 1000)
+      setSoundMs(msValue)
     }
 
     const onSetSoundStops = ({ stops }: { stops: number[] }) => {
       setStops(stops.slice())
       setClip(clipFromStops(session, sound))
-      session._editorTransport.leadIn(stops[1])
+      transport.leadIn(stops[1])
     }
 
     const onSetPlayhead = ({ ms }: {ms: number }) => {
@@ -200,33 +212,40 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
     }
 
     const onStartRecording = () => {
-      /* TODO: something */
+      setRecording(true)
+      setShowHandles(false)
+      setClip('')
     }
 
     const onStopRecording = () => {
-      /* TODO: something */
+      setRecording(false)
+      setShowHandles(!!sound.frames?.length)
     }
 
-    session._editorTransport.on('set-play-state', onSetPlayState)
-    session._editorTransport.on('set-playhead', onSetPlayhead)
-    session._editorTransport.on('start-recording', onStartRecording)
-    session._editorTransport.on('stop-recording', onStopRecording)
+    transport.on('set-play-state', onSetPlayState)
+    transport.on('set-playhead', onSetPlayhead)
+    transport.on('start-recording', onStartRecording)
+    transport.on('stop-recording', onStopRecording)
     sound.on('set-sound-file', onSetSoundFile)
     sound.on('set-sound-stops', onSetSoundStops)
     sound.on('set-sound-name', onSetSoundName)
     sound.on('update-sound', onUpdateSound)
+    sound.on('set-sound-frames', onSetSoundFrames)
+    sound.on('set-sound-ms', onSetSoundMs)
 
     return () => {
-      session._editorTransport.un('set-play-state', onSetPlayState)
-      session._editorTransport.un('set-playhead', onSetPlayhead)
-      session._editorTransport.un('start-recording', onStartRecording)
-      session._editorTransport.un('stop-recording', onStopRecording)
+      transport.un('set-play-state', onSetPlayState)
+      transport.un('set-playhead', onSetPlayhead)
+      transport.un('start-recording', onStartRecording)
+      transport.un('stop-recording', onStopRecording)
       sound.un('set-sound-file', onSetSoundFile)
       sound.un('set-sound-stops', onSetSoundStops)
       sound.un('set-sound-name', onSetSoundName)
       sound.un('update-sound', onUpdateSound)
+      sound.un('set-sound-frames', onSetSoundFrames)
+      sound.un('set-sound-ms', onSetSoundMs)
     }
-  }, [ sound, session ])
+  }, [ sound, session, transport ])
 
   useEffect(() => {
 
@@ -250,12 +269,12 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
   }, [ width ])
 
   const stop = (index: number) => {
-    return width * ((stops[index] || 0) / ms)
+    return width * ((stops[index] || 0) / soundMs)
   }
 
   const loopOverlayStyle = () => {
-    return { width: `${100 * session.info.ms / ms}%`,
-      left: `${100 * stops[1] / ms}%` }
+    return { width: `${100 * session.info.ms / soundMs}%`,
+      left: `${100 * stops[1] / soundMs}%` }
   }
 
   const setStop = (index: number) => {
@@ -263,26 +282,30 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
       if (!sound) { return }
 
       const newStops = stops.slice()
-      const msValue = (newValue / width) * ms
+      const msValue = (newValue / width) * soundMs
       newStops[index] = msValue
-      session._editorTransport.setSoundStops({ sound, stops: newStops })
+      transport.setSoundStops({ sound, stops: newStops })
     }
   }
 
   const resetStop = (index: number) => {
     return (): number => {
       if (!sound) { return stops[index] }
-      session._editorTransport.resetSoundStops({ sound, index })
+      transport.resetSoundStops({ sound, index })
       return stops[index] 
     }
   }
 
   const handleOnPlayPause = () => {
-    session._editorTransport.playPause()
+    transport.playPause()
+  }
+
+  const handleOnRecord = () => {
+    session.toggleRecording()
   }
 
   const handleOnStop = () => {
-    session._editorTransport.stop()
+    transport.stop()
   }
 
   const handleSaveEditSound = () => {
@@ -294,10 +317,20 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
   }
 
   const handleChangeSoundName = (newValue: string) => {
-    session._editorTransport.setSoundName({ sound, name: newValue })
+    transport.setSoundName({ sound, name: newValue })
   }
 
   const existingSound = session.sounds.has(sound.uid)
+
+  const onSetPlayhead = (initValue: number, newValue: number) => {
+    const msValue = (newValue / width) * soundMs
+    transport.setPlayhead(msValue)
+  }
+
+  const onResetPlayhead = () => {
+    transport.setPlayhead(0)
+    return 0
+  }
 
   return (
     <div 
@@ -314,28 +347,24 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
         onChange={ handleChangeSoundName }
       />
       <div className={ classes.vis }>
-        <div 
-          className="playhead"
-          style={ { left: `${100 * playhead / ms}%` } }
-        />
-        { !sound.frames?.length &&
+        { !frames &&
           <WaveformIcon/>
         }
-        { sound.frames &&
+        { frames &&
           <SoundVisualization
             className="lower"
             sound={ sound }
-            ms={ ms }
+            ms={ soundMs }
             outline={ true }
             fixed={ true }
           />
         }
-        { sound.frames &&
+        { frames &&
           <SoundVisualization
             className="upper"
             style={ { clipPath: clip } }
             sound={ sound }
-            ms={ ms }
+            ms={ soundMs }
             gridLines={ false }
             fixed={ true }
           />
@@ -386,6 +415,13 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
           />
         ]
         }
+        <StopHandle
+          type="playhead"
+          x={ width * (playhead / soundMs) } 
+          totalWidth={ width }
+          onChanged={ onSetPlayhead }
+          onReset={ onResetPlayhead }
+        />
       </div>
       <div 
         className={ classes.transportControls }
@@ -393,13 +429,13 @@ function SoundEditor({ sound, session }: SoundEditorProps): JSX.Element {
         <IconButton onClick={ handleOnStop }>
           <StopIcon/> 
         </IconButton>
-        { !sound.canRecord &&
-          <IconButton onClick={ handleOnPlayPause }>
-            { playState === 'playing' ? <PauseIcon/> : <PlayArrowIcon/> }
-          </IconButton>
-        }
+        <IconButton onClick={ handleOnPlayPause }>
+          { playState === 'playing' ? <PauseIcon/> : <PlayArrowIcon/> }
+        </IconButton>
         { sound.canRecord &&
-          <IconButton onClick={ handleOnPlayPause }>
+          <IconButton 
+            className={ `${classes.recordButton} ${recording ? 'recording' : ''}` }
+            onClick={ handleOnRecord }>
             <FiberManualRecordIcon/>
           </IconButton>
         }
@@ -492,6 +528,7 @@ function SoundEditorDialog({ session, sound, node, open, ...props }: SoundEditor
         <SoundEditor
           sound={ sound }
           session={ session }
+          transport={ session._editorTransport }
         />
       </CloseableDialog>
     )
@@ -527,6 +564,7 @@ function SoundEditorDialog({ session, sound, node, open, ...props }: SoundEditor
           <SoundEditor
             sound={ sound }
             session={ session }
+            transport={ session._editorTransport }
           />
         }
       </SlidingPageDialog>

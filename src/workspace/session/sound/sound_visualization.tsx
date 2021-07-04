@@ -100,13 +100,17 @@ const renderFrames = ({
   const widthOffset = zero * xStep 
   for (let p = zero; p <= endInd; p++) {
     const max = frames[p]?.max ?? 0
-    ctx.lineTo(Math.round(xStep * p) - widthOffset, Math.round(max * heightFactor + offset))
+    const ts = frames[p]?.ts
+    const x = typeof ts === 'number' ? ts / finalMs * width : xStep * p
+    ctx.lineTo(Math.round(x) - widthOffset, Math.round(max * heightFactor + offset))
   }
 
   /* then the minimums backwards */
   for (let p = endInd; p >= zero; p--) {
     const min = frames[p]?.min ?? 0
-    ctx.lineTo(Math.round(xStep * p) - widthOffset, Math.round(min * heightFactor + offset))
+    const ts = frames[p]?.ts
+    const x = typeof ts === 'number' ? ts / finalMs * width : xStep * p
+    ctx.lineTo(Math.round(x) - widthOffset, Math.round(min * heightFactor + offset))
   }
 
   ctx.closePath()
@@ -144,13 +148,17 @@ const renderFrames = ({
     ctx.moveTo(widthOffset, Math.round(frames[0].min * heightFactor + offset))
     for (let p = zero; p <= stop1Index; p++) {
       const max = frames[p]?.max ?? 0
-      ctx.lineTo(widthOffset + Math.round(xStep * p), Math.round(max * heightFactor + offset))
+      const ts = frames[p]?.ts
+      const x = typeof ts === 'number' ? ts / finalMs * width : xStep * p
+      ctx.lineTo(widthOffset + Math.round(x), Math.round(max * heightFactor + offset))
     }
 
     /* then the minimums backwards */
     for (let p = stop1Index; p >= zero; p--) {
       const min = frames[p]?.min ?? 0
-      ctx.lineTo(widthOffset + Math.round(xStep * p), Math.round(min * heightFactor + offset))
+      const ts = frames[p]?.ts
+      const x = typeof ts === 'number' ? ts / finalMs * width : xStep * p
+      ctx.lineTo(widthOffset + Math.round(x), Math.round(min * heightFactor + offset))
     }
 
     if (gradient) {
@@ -205,6 +213,8 @@ function SoundVisualization({
     }
 
     sound.on('set-sound-file', onModifySound)
+    sound.on('set-sound-frames', onModifySound)
+    sound.on('set-sound-ms', onModifySound)
 
     /* also needs to go here in order to change when ms changes */
     if (canvasRef.current) {
@@ -221,6 +231,8 @@ function SoundVisualization({
 
     return () => {
       sound.un('set-sound-file', onModifySound)
+      sound.un('set-sound-frames', onModifySound)
+      sound.un('set-sound-ms', onModifySound)
     }
   })
 

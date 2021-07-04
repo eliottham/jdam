@@ -606,6 +606,7 @@ class Session extends Evt implements ITransport {
       this._editingSoundInit = sound.copy()
     }
 
+    const previousTransport = this._editorTransport
     if (record) {
       this._editorTransport = new SoundRecorder({
         metro: this.metro,
@@ -615,13 +616,11 @@ class Session extends Evt implements ITransport {
         deviceId: this.client.settings.getSelectedDevice({ type: 'input' })?.deviceId || 'default'
       })
       this._editorTransport.sync(this.transport, this.metro.getPatternLength())
-      this._editorTransport.once('stop-recording', ({ file }: { file: File }) => {
-        this.processAndConvertSoundFile({ sound: this._editingSound, file })
-      })
     } else {
       this._editorTransport = new Transport({ audioCtx: this.audioCtx })
       this._editorTransport.sync(this.transport)
     }
+    previousTransport.shallowCopyEvents(this._editorTransport)
     this._editorTransport.setLoopLength({ loopLength: this.info.ms })
 
     /* cram the current sound in to the transport and set the playhead back to 0 */
@@ -654,6 +653,29 @@ class Session extends Evt implements ITransport {
     this._editorTransport.stop()
     this._editorTransport.setSounds({ sounds: [] })
     this.fire('cancel-edit-sound', { sound }) 
+  }
+
+  startRecording() {
+    this._editorTransport.stop()
+    if (this._editorTransport.playState !== 'recording') {
+      this._editorTransport.setPlayState('recording')
+      this._editorTransport.once('stop-recording', ({ file }: { file: File }) => {
+        this._editorTransport.sync(this.transport)
+        this.processAndConvertSoundFile({ sound: this._editingSound, file })
+      })
+    }
+  }
+
+  stopRecording() {
+    this._editorTransport.stop()
+  }
+
+  toggleRecording() {
+    if (this._editorTransport.playState !== 'recording') {
+      this.startRecording()
+    } else {
+      this.stopRecording()
+    }
   }
 
   async saveEditSound() {

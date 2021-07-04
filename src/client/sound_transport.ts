@@ -60,7 +60,7 @@ class Transport extends Evt implements ITransport {
   }
 
   setSoundStops({ sound, stops }: { sound: Sound, stops: number[] }) {
-    if (this.playState !== 'stopped') {
+    if (this.mapPlayState() !== 'stopped') {
       this.stop()
     }
 
@@ -140,6 +140,18 @@ class Transport extends Evt implements ITransport {
     this.setSoundSoloed({ sound, soloed: !sound.soloed }) 
   }
 
+  setSoundMs({ sound, ms }: { sound: Sound, ms: number }) {
+    sound.ms = ms
+    this.fire('set-sound-ms', { sound, ms })
+    sound.fire('set-sound-ms', { sound, ms })
+  }
+
+  setSoundFrames({ sound, frames }: { sound: Sound, frames: Frames }) {
+    sound.frames = frames
+    this.fire('set-sound-frames', { sound, frames })
+    sound.fire('set-sound-frames', { sound, frames })
+  }
+
   setSoundFile({ 
     file,
     audioBuffer,
@@ -154,10 +166,10 @@ class Transport extends Evt implements ITransport {
     sound: Sound 
   }) {
     sound.file = file
-    if (frames) { sound.frames = frames }
+    if (frames) { this.setSoundFrames({ sound, frames }) }
 
     if (ms) { 
-      sound.ms = ms 
+      this.setSoundMs({ sound, ms })
     }
 
     sound.audioBuffer = audioBuffer
@@ -270,7 +282,7 @@ class Transport extends Evt implements ITransport {
       env.disconnect()
       this.activeSources.delete(source)
       if (!this.activeSources.size && this.loopLength <= 0) {
-        if (this.playState === 'paused') {
+        if (this.mapPlayState() === 'paused') {
           this.pause()
         } else {
           this.stop()
@@ -354,13 +366,13 @@ class Transport extends Evt implements ITransport {
     this.fire('set-playhead', { base: this.playheadBase, ms })
 
     /* restart playing all sounds but at the correct offset with the playhead */
-    if (this.playState === 'playing') { 
+    if (this.mapPlayState() === 'playing') { 
       this.pause()
       this.play()
     }
 
     for (const [ transport, offset ] of this.syncs) {
-      transport.setPlayhead(ms - offset)
+      transport.setPlayhead(Math.max(0, ms + offset - this._getLoopStart()))
     }
 
     return this
@@ -369,7 +381,7 @@ class Transport extends Evt implements ITransport {
   beginLooping(offset = 0) {
     /* schedule audio for one loop ahead and then recursively call */
     const queue = (offset = 0) => {
-      if (this.loopLength > 0 && this.playState === 'playing') {
+      if (this.loopLength > 0 && this.mapPlayState() === 'playing') {
         this.playSounds(this.loopLength + offset)
         this.loopTimerId = window.setTimeout(() => {
           queue()
@@ -393,8 +405,10 @@ class Transport extends Evt implements ITransport {
     }
   }
 
+  mapPlayState(state = this.playState) { return state }
+
   setPlayState(state: string, offset = 0) {
-    if (this.playState === 'stopped' &&
+    if (this.mapPlayState() === 'stopped' &&
         state === 'stopped' && 
         this.playhead === this.playheadBase) {
       this.playhead = 0
@@ -410,7 +424,7 @@ class Transport extends Evt implements ITransport {
     this.playState = state
     this.fire('set-play-state', { playState: state })
 
-    switch (this.playState) {
+    switch (this.mapPlayState(state)) {
     case 'playing': 
       /* 
        * subtract off playhead to compensate for non-zero playhead position
@@ -443,7 +457,7 @@ class Transport extends Evt implements ITransport {
       this.exclusions.clear()
 
       /* this is the only difference between the two functions */
-      if (this.playState === 'stopped') {
+      if (this.mapPlayState() === 'stopped') {
         /* reset the playhead to the playheadBase and fire event */
         this.playhead = this.playheadBase
         this.fire('set-playhead', { base: this.playheadBase, ms: this.playhead })
@@ -453,7 +467,7 @@ class Transport extends Evt implements ITransport {
 
     for (const [ transport, offset ] of this.syncs) {
       transport.setExclusions({ soundUids: this.sounds.map(sound => sound.uid) })
-      transport.setPlayState(this.playState, Math.max(0, offset + this._getLoopStart()))
+      transport.setPlayState(this.mapPlayState(), Math.max(0, offset + this._getLoopStart()))
     }
 
     return this
@@ -492,7 +506,7 @@ class Transport extends Evt implements ITransport {
 
   /* request animation frame updates to update the play head */
   updatePlayhead() {
-    if (this.playState === 'playing') {
+    if (this.mapPlayState() === 'playing') {
       const result = Math.max(0, this._getPlayhead(true) + this._getLoopStart())
       this.fire('set-playhead', { base: this.playheadBase, ms: result })
       window.requestAnimationFrame(() => {
@@ -523,7 +537,7 @@ class Transport extends Evt implements ITransport {
   }
 
   playPause() {
-    if (this.playState === 'playing') {
+    if (this.mapPlayState() === 'playing') {
       this.pause()
     } else { 
       this.play()
@@ -547,7 +561,7 @@ class Transport extends Evt implements ITransport {
     if (transport.syncs.has(this)) { return }
 
     this.syncs.set(transport, offset)
-    transport.setPlayState(this.playState)
+    transport.setPlayState(this.mapPlayState())
   }
 
   unsyncAll() {
