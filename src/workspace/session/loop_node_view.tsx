@@ -47,6 +47,13 @@ const useStyles = makeStyles({
           borderColor: 'var(--d-primary)'
         }
       },
+      '&.highlight': {
+        backgroundColor: 'var(--lt-blue)',
+        boxShadow: '0 2px 12px 0 rgb(0 0 0 / 50%)',
+        '& .container': {
+          borderColor: 'var(--d-blue)'
+        }
+      },
       '& .container': {
         height: nodeHeight,
         width: nodeWidth,
@@ -114,10 +121,12 @@ function LoopNodeView({
    * visualization component 
    */
   const playheadRef = useRef<HTMLDivElement>(null)
+  const ref = useRef<HTMLDivElement>(null)
 
   const [ inheritedSounds, setInheritedSounds ] = useState<Sound[]>(node.getInheritedSounds())
   const [ sounds, setSounds ] = useState<Sound[]>(node.getSounds())
   const [ ms, setMs ] = useState(session.info.ms)
+  const [ highlight, setHighlight ] = useState(false)
 
   useEffect(() => {
     /* do nothing */
@@ -134,10 +143,33 @@ function LoopNodeView({
       playheadRef.current.style.left = `${100 * playhead / ms}%`
     }
 
+    const onDropAssignSound = ({ x, y }: { x: number, y: number }) => {
+      if (!ref.current) { return }
+      const rect = ref.current.getBoundingClientRect()
+      if (x > rect.x && x < rect.x + rect.width &&
+            y > rect.y && y < rect.y + rect.height) {
+        session.confirmInteractiveAssignSound({ node })
+        setHighlight(false)
+      }
+    }
+
+    const onQueryAssignSound = ({ x, y }: { x: number, y: number }) => {
+      if (!ref.current) { return }
+      const rect = ref.current.getBoundingClientRect()
+      if (x > rect.x && x < rect.x + rect.width &&
+            y > rect.y && y < rect.y + rect.height) {
+        setHighlight(true)
+      } else {
+        setHighlight(false)
+      }
+    }
+
     transport.on('set-playhead', onSetPlayhead)
     transport.on('set-sound-file', onModifyNode)
     session.on('update-sound', onModifyNode)
     session.on('set-sounds', onModifyNode)
+    session.on('drop-assign-sound', onDropAssignSound)
+    session.on('query-assign-sound', onQueryAssignSound)
     node.on('assign-sound', onModifyNode)
 
     return () => {
@@ -145,12 +177,15 @@ function LoopNodeView({
       transport.un('set-sound-file', onModifyNode)
       session.un('update-sound', onModifyNode)
       session.un('set-sounds', onModifyNode)
+      session.un('drop-assign-sound', onDropAssignSound)
+      session.un('query-assign-sound', onQueryAssignSound)
       node.un('assign-sound', onModifyNode)
     }
   }, [ session, node, transport, ms ])
 
   const handleOnClick = () => {
     onSelect?.(node)
+    node.parent?.setSelectedNode(node.parent?.children.indexOf(node))
   }
 
   const handleOnPlayPause = () => {
@@ -216,7 +251,8 @@ function LoopNodeView({
 
   return (
     <Paper 
-      className={ `${classes.paperMargin} ${selected ? 'selected' : ''}` } 
+      ref={ ref }
+      className={ `${classes.paperMargin} ${selected && !highlight ? 'selected' : ''} ${highlight ? 'highlight' : ''}` } 
       onClick={ handleOnClick }
     >
       <div className="container">
@@ -229,6 +265,7 @@ function LoopNodeView({
           <TrackView 
             node={ node } 
             transport={ transport }
+            session={ session }
             transportControls={ true }
             onPlayPause={ handleOnPlayPause }
             onStop={ handleOnStop }

@@ -8,6 +8,7 @@ interface LoopNodeParams {
   parent?: LoopNode
   session?: Session
   sounds?: string[]
+  accountId?: string
   uid: string
 }
 
@@ -18,8 +19,9 @@ class LoopNode extends Evt implements ITransport {
   sounds: Set<string> = new Set() /* references to uid only, sounds will be stored on session in a map */
   uid = ''
   session?: Session
+  accountId?: string
 
-  constructor({ children, parent, uid, session, sounds }: LoopNodeParams) {
+  constructor({ children, parent, uid, session, sounds, accountId }: LoopNodeParams) {
     super()
 
     if (children) { this.children = children }
@@ -28,6 +30,7 @@ class LoopNode extends Evt implements ITransport {
     if (sounds) {
       this.setSounds(sounds)
     }
+    if (accountId) { this.accountId = accountId }
     this.uid = uid
   }
 

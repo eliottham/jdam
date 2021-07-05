@@ -74,9 +74,10 @@ app.ws('/ws', ws => {
           const json = JSON.parse(data)
           const { token, sessionId } = json
           try {
-            checkAuth({ token })
+            const { id: accountId } = checkAuth({ token })
+            json.reqAccount = accountId
 
-            sessionOps.write(sessionId, mId, data)
+            sessionOps.write(sessionId, mId, JSON.stringify(json))
           } catch (err) {
             messageClient(ws, `ses:-1:${JSON.stringify({ expired: true })}`)
           }

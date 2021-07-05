@@ -21,8 +21,15 @@ const useStyles = makeStyles({
     height: '100%',
     width: '100%',
     overflowX: 'hidden',
-    overflowY: 'scroll',
-    position: 'relative'
+    overflowY: 'hidden',
+    position: 'relative',
+    '& > .scroll-content': {
+      height: '100%',
+      width: '100%',
+      overflowX: 'hidden',
+      overflowY: 'scroll',
+      position: 'relative'
+    }
   },
   popupLayer: {
     position: 'absolute',
@@ -119,6 +126,16 @@ function SessionView({ session, setActive = false }: SessionViewProps): JSX.Elem
 
   return (
     <div className={ classes.root }>
+      <div className="scroll-content">
+        { !!rootNode &&
+          <LoopNodeLane
+            depth={ 0 }
+            key="root-lane"
+            rootNode={ rootNode } 
+            session={ session } 
+          />
+        }
+      </div>
       <IconButton
         className={ classes.showSounds }
         onClick={ handleOnOpenSoundsDrawer }
@@ -130,14 +147,6 @@ function SessionView({ session, setActive = false }: SessionViewProps): JSX.Elem
         session={ session }
         onClose={ handleOnCloseSoundsDrawer }
       />
-      { !!rootNode &&
-        <LoopNodeLane
-          depth={ 0 }
-          key="root-lane"
-          rootNode={ rootNode } 
-          session={ session } 
-        />
-      }
       <SoundEditorDialog
         open={ !!editingSound }
         onClose={ handleOnCloseSoundEditor }

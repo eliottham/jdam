@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import Session from '../../client/session'
 import Sound from '../../client/sound'
 
+import SoundAssigner from './sound_assigner'
+
 import { makeStyles } from '@material-ui/styles'
 
 import { 
@@ -64,6 +66,15 @@ const useStyles = makeStyles({
       color: 'var(--grey)',
       fontSize: '10px'
     }
+  },
+  assigner: {
+    '& > svg': {
+      color: 'var(--lt-blue)',
+      cursor: 'crosshair'
+    },
+    '&:hover > svg': {
+      color: 'var(--d-blue)'
+    }
   }
 })
 
@@ -84,10 +95,17 @@ function SoundInfo({ sound, session }: SoundInfoProps): JSX.Element {
     <ListItem
       className={ classes.listItem }
     >
-      <div>
+      <div style={ { marginRight: 'auto' } }>
         <div className="label">{ sound.name }</div>
         { !sound.ownerNode && <div className="sub-label">NO NODE</div> }
       </div>
+      { !sound.ownerNode &&
+        <SoundAssigner
+          className={ classes.assigner }
+          session={ session }
+          sound={ sound }
+        />
+      }
       <EditSoundIcon
         onClick={ handleOnEditSound }
       />

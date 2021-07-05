@@ -6,6 +6,7 @@ interface DraggableProps {
   y?: number
   setX?: (x: number) => void
   setY?: (y: number) => void
+  onChangeStart?: (initX: number, initY: number) => void
   onChanging?: (initX: number, initY: number, diffX: number, diffY: number) => void 
   onChanged?: (initX: number, initY: number, diffX: number, diffY: number) => void 
   onReset?: () => [ newX: number, newY: number ]
@@ -24,6 +25,7 @@ const Draggable = forwardRef<HTMLDivElement, DraggableProps>(({
   y = 0,
   setX,
   setY,
+  onChangeStart,
   onChanging,
   onChanged,
   onReset,
@@ -45,6 +47,7 @@ const Draggable = forwardRef<HTMLDivElement, DraggableProps>(({
     let diffX = 0
     let diffY = 0
     setChanging(true)
+    onChangeStart?.(initX, initY)
     const onMouseMove = (evt: MouseEvent) => {
       diffX = evt.clientX - startPos[0]
       diffY = evt.clientY - startPos[1]

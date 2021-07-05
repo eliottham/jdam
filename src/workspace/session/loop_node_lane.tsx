@@ -96,10 +96,6 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
 
   const selectedNode = rootNode.getSelectedNode()
 
-  const handleOnSelect = (node: LoopNode) => {
-    rootNode.setSelectedNode(rootNode.children.indexOf(node))
-  }
-  
   const canAdd = children.length < maxWidth && depth < maxDepth 
 
   return (
@@ -114,7 +110,6 @@ function LoopNodeLane({ session, rootNode, depth = 0 }: LoopNodeLaneProps): JSX.
             selected={ index === selectedNodeIndex }
             key={ `${session.sessionId}-${child.uid}` } 
             node={ child }
-            onSelect={ handleOnSelect }
             session={ session }
             transport={ session.transport }
           />

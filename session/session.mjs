@@ -231,7 +231,8 @@ function findNode(uid) {
 
 function abbreviateNode(node) {
   const result = {
-    uid: node.uid
+    uid: node.uid,
+    accountId: node.accountId
   }
   if (node.parent) {
     result.parentUid = node.parent.uid
@@ -251,9 +252,11 @@ function abbreviateNode(node) {
   return result
 }
 
-function addNode({ parentUid }) {
+function addNode({ parentUid, reqAccount }) {
   if (!parentUid) { 
     const newNode = new LoopNode({})
+    if (reqAccount) { newNode.accountId = reqAccount }
+
     if (rootNode.children.length < MAX_WIDTH) {
       rootNode.children.push(newNode)
       return { addedNode: abbreviateNode(newNode) } 
@@ -269,6 +272,8 @@ function addNode({ parentUid }) {
       throw Error(`Maximum depth of ${MAX_DEPTH} been reached`)
     }
     const newNode = new LoopNode({parent: parentNode})
+    if (reqAccount) { newNode.accountId = reqAccount }
+
     if (parentNode.children.length < MAX_WIDTH) {
       parentNode.children.push(newNode)
       return { addedNode: abbreviateNode(newNode) } 
@@ -278,10 +283,14 @@ function addNode({ parentUid }) {
   }
 }
 
-function deleteNode({ uid }) {
+function deleteNode({ uid, reqAccount }) {
   const { node } = findNode(uid)
   if (!node) {
     throw Error('Node UID not found in nodes')
+  }
+
+  if (node.reqAccount && reqAccount !== node.accountId) {
+    throw Error('You are not the owner of this node')
   }
 
   /* go through every child and clear sound owner nodes */
@@ -310,7 +319,6 @@ function deleteNode({ uid }) {
 function upsertSound(params = {}) {
 
   if (typeof params !== 'object') { throw Error('params must be an object') }
-
 
   const { 
     nodeUid,
@@ -342,6 +350,10 @@ function upsertSound(params = {}) {
      * allow account to update an existingSound, but only if that existingSound
      * has the same ownerNode already as the updated version
      */
+    if (existingSound.accountId !== params.reqAccount) {
+      throw Error('cannot update a sound from another account')
+    }
+
     if (existingSound.ownerNode?.uid !== nodeUid &&
       nodeUid &&
       accountId &&
@@ -349,9 +361,17 @@ function upsertSound(params = {}) {
       throw Error('accountId cannot assign another sound to this node')
     }
 
-    delete params.nodeUid
+    const updateSoundData = {
+      name,
+      path
+    }
 
-    Object.assign(existingSound, params)
+    if (params.volume) { updateSoundData.volume = params.volume }
+    if (params.pan) { updateSoundData.pan = params.pan }
+    if (params.stops) { updateSoundData.stops = params.stops }
+
+    Object.assign(existingSound, updateSoundData)
+
     result.updatedSound = { ...existingSound }
     if (existingSound.ownerNode) {
       result.updatedSound.ownerNode = existingSound.ownerNode.uid
@@ -374,7 +394,7 @@ function upsertSound(params = {}) {
   return result
 }
 
-function deleteSound(uid) {
+function deleteSound({ uid }) {
   if (sounds.has(uid)) {
     const existingSound = sounds.get(uid)
 
@@ -461,7 +481,7 @@ function messageAll(payload, excludeSocket) {
   }
 }
 
-async function processRequest(mId, req, socket) {
+async function processRequest(mId, req, socket, params) {
   console.dir(req)
   const payload = {}
   if (typeof req === 'string') {
@@ -493,21 +513,30 @@ async function processRequest(mId, req, socket) {
         exit()
       } else if ('addNode' in req) {
         Object.assign(payload, addNode({
-          parentUid: req.addNode 
+          parentUid: req.addNode,
+          reqAccount: params.reqAccount 
         }))
       } else if (req.deleteNode) {
-        Object.assign(payload, deleteNode({
-          uid: req.deleteNode
+        Object.assign(payload, deleteNode({ 
+          uid: req.deleteNode,
+          reqAccount: params.reqAccount 
         }))
       } else if (req.assignSound && req.toNode) {
         Object.assign(payload, assignSoundToNode({
+          accountId: params.reqAccount,
           soundUid: req.assignSound,
           nodeUid: req.toNode
         }))
       } else if (req.upsertSound) {
-        Object.assign(payload, upsertSound(req.upsertSound))
+        Object.assign(payload, upsertSound({
+          ...req.upsertSound,
+          reqAccount: params.reqAccount 
+        }))
       } else if (req.deleteSound) {
-        Object.assign(payload, deleteSound(req.deleteSound))
+        Object.assign(payload, deleteSound({
+          uid: req.deleteSound,
+          reqAccount: params.reqAccount 
+        }))
       }
     } catch (err) {
       Object.assign(payload, { 
@@ -541,9 +570,10 @@ const sessionServer = net.createServer(socket => {
       const mId = data.slice(0, splitIndex) 
       try {
         const json = JSON.parse(data.slice(splitIndex + 1))
-        const { req } = json
+        const { req, ...params } = json
         try {
-          processRequest(mId, req, socket)
+          /* send all the rest of the params in for reference if necessary */ 
+          processRequest(mId, req, socket, params)
         } catch (err) {
           socket.write(response(mId, { error: err.message }))
         }

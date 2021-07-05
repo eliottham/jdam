@@ -367,8 +367,7 @@ class Transport extends Evt implements ITransport {
 
     /* restart playing all sounds but at the correct offset with the playhead */
     if (this.mapPlayState() === 'playing') { 
-      this.pause()
-      this.play()
+      this.stop()
     }
 
     for (const [ transport, offset ] of this.syncs) {
@@ -407,6 +406,22 @@ class Transport extends Evt implements ITransport {
 
   mapPlayState(state = this.playState) { return state }
 
+  silence() {
+    window.clearTimeout(this.loopTimerId)
+    for (const [ source, envelope ] of this.activeSources) {
+      envelope.gain.cancelScheduledValues(0)
+      envelope.disconnect()
+      try {
+        source.disconnect()
+        source.stop()
+      } catch (err) {
+        /* do nothing */
+      }
+    }
+
+    this.activeSources.clear()
+  }
+
   setPlayState(state: string, offset = 0) {
     if (this.mapPlayState() === 'stopped' &&
         state === 'stopped' && 
@@ -441,19 +456,7 @@ class Transport extends Evt implements ITransport {
     case 'stopped':
       /* stop all currently-playing source nodes */
       this.playhead = this._getPlayhead() + offset
-      window.clearTimeout(this.loopTimerId)
-      for (const [ source, envelope ] of this.activeSources) {
-        envelope.gain.cancelScheduledValues(0)
-        envelope.disconnect()
-        try {
-          source.disconnect()
-          source.stop()
-        } catch (err) {
-          /* do nothing */
-        }
-      }
-
-      this.activeSources.clear()
+      this.silence()
       this.exclusions.clear()
 
       /* this is the only difference between the two functions */

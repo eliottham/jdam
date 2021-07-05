@@ -2,6 +2,7 @@ import LoopNode from '../../client/loop_node'
 import SoundVisualization from './sound/sound_visualization'
 import Sound from '../../client/sound'
 import Transport from '../../client/sound_transport'
+import Session from '../../client/session'
 
 import { useEffect, useState, Fragment } from 'react'
 
@@ -138,6 +139,7 @@ const useStyles = makeStyles({
 
 interface TrackViewProps {
   node: LoopNode
+  session?: Session
   sound?: Sound
   ms?: number
   disabled?: boolean
@@ -151,6 +153,7 @@ interface TrackViewProps {
 
 function TrackView({
   node,
+  session,
   sound,
   ms,
   disabled = false,
@@ -249,6 +252,8 @@ function TrackView({
     node.delete()
   }
 
+  const canDelete = !node.accountId || session?.client?.account?.id === node.accountId
+
   return (
     <Fragment>
       { !transportControls &&
@@ -330,7 +335,7 @@ function TrackView({
             />
           ]
         }
-        { transportControls &&
+        { (transportControls && canDelete) && 
           <ChargeButton
             className={ `${classes.deleteButton} ${playState !== 'stopped' ? 'disabled' : ''}` }
             onConfirm={ handleOnDeleteNode }

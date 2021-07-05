@@ -73,6 +73,8 @@ class Session extends Evt implements ITransport {
   _editingSoundInit?: Sound
   _editorTransport: Transport
 
+  _assigningSound?: Sound
+
   masterGain: GainNode
   transport: Transport
 
@@ -270,6 +272,7 @@ class Session extends Evt implements ITransport {
           result.setSounds(nodeTemplate.sounds)
         } else {
           result = new LoopNode({
+            accountId: nodeTemplate.accountId,
             session: this,
             uid: nodeTemplate.uid,
             sounds: nodeTemplate.sounds,
@@ -289,6 +292,7 @@ class Session extends Evt implements ITransport {
     if (params.addedNode) {
       const { addedNode } = params
       const newNode = new LoopNode({ 
+        accountId: addedNode.accountId,
         uid: addedNode.uid,
         session: this 
       })
@@ -297,7 +301,9 @@ class Session extends Evt implements ITransport {
         if (parentNode) {
           newNode.inheritFrom(parentNode)
           parentNode.addChild(newNode)
-          parentNode.setSelectedNode(parentNode.children.indexOf(newNode))
+          if (addedNode.accountId === this.client.account.id) {
+            parentNode.setSelectedNode(parentNode.children.indexOf(newNode))
+          }
         }
         this.fire('add-node', { addedNode: newNode, parentNode })
         this.fire('set-nodes', { root: this.rootNode })
@@ -732,6 +738,35 @@ class Session extends Evt implements ITransport {
     this.deleteSound(sound.uid)
     this.fire('delete-edit-sound', { existingSound }) 
     this.cancelEditSound()
+  }
+
+  beginInteractiveAssignSound({ sound }: { sound: Sound }) {
+    this._assigningSound = sound
+    this.fire('begin-assign-sound', { sound })
+  }
+
+  cancelInteractiveAssignSound() {
+    const sound = this._assigningSound
+    this._assigningSound = undefined
+    this.fire('cancel-assign-sound', { sound })
+  }
+
+  queryInteractiveAssignSound(x: number, y: number) {
+    this.fire('query-assign-sound', { x, y })
+  }
+
+  dropInteractiveAssignSound(x: number, y: number) {
+    this.fire('drop-assign-sound', { x, y })
+  }
+  
+  confirmInteractiveAssignSound({ node }: { node: LoopNode }) {
+    if (!this._assigningSound) { return }
+    const sound = this._assigningSound
+
+    this.assignSoundToNode({ soundUid: sound.uid, nodeUid: node.uid })
+
+    this._assigningSound = undefined
+    this.fire('confirm-assign-sound', { sound, node })
   }
 
   assignFileToSound({
