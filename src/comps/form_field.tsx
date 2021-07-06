@@ -77,7 +77,7 @@ export interface FormFieldTemplate<valueType=string> {
 }
 
 export interface FormFieldProps<valueType=string> extends FormFieldTemplate<valueType> {
-    fragment: boolean
+    fragment?: boolean
     fieldValue?: string
     setFieldValue?: (newValue: string) => void
     validate?: boolean
@@ -85,6 +85,8 @@ export interface FormFieldProps<valueType=string> extends FormFieldTemplate<valu
     onValidate?: (valid: boolean) => void
     onEnter?: (value: valueType, confirm: boolean) => void
     children?: React.ReactNode
+    noLabel?: boolean
+    className?: string
 }
 
 function FormField({
@@ -95,6 +97,7 @@ function FormField({
   validate,
   onValidate = () => { /* noop */ },
   latentValidation,
+  noLabel = false,
   ...props }: FormFieldProps): JSX.Element {
 
   const classes = useStyles()
@@ -196,9 +199,8 @@ function FormField({
   const confirmFilled = confirmValue && validation ? 'filled' : ''
   const useChildren = !!props.children
 
-  return React.createElement(fragment ? React.Fragment : 'div', { ...!fragment && { className: classes.formField }}, [
-    <div className={ classes.formLabel } key={ `label-${props.name}` }>{ props.label ? props.label : '' }</div>,
-    <div className={ `${ classes.formField } ${confirm ? 'confirm' : ''}` } key={ `field-${props.name}` }>
+  const children = [
+    <div className={ `${classes.formField} ${props.className || ''} ${confirm ? 'confirm' : ''}` } key={ `field-${props.name}` }>
       { useChildren && props.children }
       { !useChildren &&
         <input 
@@ -229,7 +231,15 @@ function FormField({
         })
       }
     </div>
-  ])
+  ]
+
+  if (!noLabel) { 
+    children.unshift(
+      <div className={ classes.formLabel } key={ `label-${props.name}` }>{ props.label ? props.label : '' }</div>
+    )
+  }
+
+  return React.createElement(fragment ? React.Fragment : 'div', { ...!fragment && { className: classes.formField }}, children)
 }
 
 export default FormField

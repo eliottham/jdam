@@ -72,7 +72,9 @@ class Transport extends Evt implements ITransport {
   resetSoundStops({ sound, index }: { sound: Sound, index?: number }) {
     if (!sound) { return }
 
-    this.stop()
+    if (this.mapPlayState() !== 'stopped') {
+      this.stop()
+    }
 
     const resetStops = sound.getDefaultStops()
     if (typeof index !== 'undefined' && !isNaN(index)) {
@@ -470,7 +472,7 @@ class Transport extends Evt implements ITransport {
 
     for (const [ transport, offset ] of this.syncs) {
       transport.setExclusions({ soundUids: this.sounds.map(sound => sound.uid) })
-      transport.setPlayState(this.mapPlayState(), Math.max(0, offset + this._getLoopStart()))
+      transport.setPlayState(this.mapPlayState(), Math.max(0, offset + (this._getLoopStart() - this.playhead)))
     }
 
     return this

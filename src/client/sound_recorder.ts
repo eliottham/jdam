@@ -21,6 +21,7 @@ class SoundRecorder extends Transport {
   measures = 4
   syncs = new Map<Transport, number>()
   deviceId: string
+  tail = 3000
 
   metroGain: GainNode
 
@@ -49,8 +50,8 @@ class SoundRecorder extends Transport {
   setLoopLength({ loopLength }: { loopLength: number}) {
     super.setLoopLength({ loopLength })
 
-    /* add one measure on the (front) and 2000 ms off the end */
-    const totalLength = loopLength + this.metro.getPatternLength() + 2000
+    /* add one measure on the (front) and {tail} ms off the end */
+    const totalLength = loopLength + this.metro.getPatternLength() + this.tail
     this.totalLength = totalLength
     this.sounds.forEach(sound => { 
       this.setSoundMs({ sound, ms: totalLength })
@@ -59,7 +60,9 @@ class SoundRecorder extends Transport {
     return this
   }
 
-  async startRecording(): Promise<AnalyserNode> {
+  async startRecording() {
+
+    if (this.playState === 'recording') { return }
 
     await this.metro.getClicks('click')
 
@@ -75,7 +78,10 @@ class SoundRecorder extends Transport {
     delete sound.audioBuffer
     this.sounds.forEach(sound => { 
       this.setSoundMs({ sound, ms: this.totalLength })
-      this.resetSoundStops({ sound })
+      /* set the sound stops to the suitable values for recording */
+      const loopStart = this._getLoopStart()
+      const loopEnd = this.totalLength - this.tail
+      this.setSoundStops({ sound, stops: [ Math.max(0, loopStart - 2000), loopStart, loopEnd, Math.max(loopEnd, this.totalLength - 200) ] })
     })
 
     const analyzer = this.audioCtx.createAnalyser()
@@ -150,8 +156,6 @@ class SoundRecorder extends Transport {
 
   setPlayState(state: string) {
 
-    if (state === this.playState) { return this }
-
     switch (state) {
     case 'recording':
       this.startRecording().then(() => {
@@ -165,6 +169,19 @@ class SoundRecorder extends Transport {
     }
 
     return this
+  }
+
+  updatePlayhead() {
+    if (this.mapPlayState() === 'playing') {
+      let result = Math.max(0, this._getPlayhead(true) + this._getLoopStart())
+      if (this.playState === 'recording') {
+        result = Math.max(0, this._getPlayhead())
+      }
+      this.fire('set-playhead', { base: this.playheadBase, ms: result })
+      window.requestAnimationFrame(() => {
+        this.updatePlayhead()
+      })
+    }
   }
 
   mapPlayState(state = this.playState) {

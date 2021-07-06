@@ -26,6 +26,7 @@ import StopIcon from '@material-ui/icons/Stop'
 import PauseIcon from '@material-ui/icons/Pause'
 import DeleteIcon from '@material-ui/icons/Delete'
 import FiberManualRecordIcon from '@material-ui/icons/FiberManualRecord'
+import SaveAltIcon from '@material-ui/icons/SaveAlt'
 import { WaveformIcon } from '../../../comps/icons'
 
 const soundVisHeight = 256
@@ -35,12 +36,12 @@ const useStyles = makeStyles({
     minHeight: soundVisHeight,
     width: '100%',
     display: 'grid',
-    gridTemplateAreas: `"labl field"
-                        "vis   vis"
-                        "con   con"
-                        "trash yes"`,
+    gridTemplateAreas: `"field field field"
+                        "vis   vis   vis"
+                        "con   con   con"
+                        "trash dl    yes"`,
     gridTemplateRows: 'min-content min-content 1fr min-content',
-    gridTemplateColumns: 'max-content auto',
+    gridTemplateColumns: 'min-content min-content auto',
     position: 'relative',
     padding: '24px 2px 2px',
     overflow: 'hidden'
@@ -91,7 +92,7 @@ const useStyles = makeStyles({
       borderRadius: 4,
       marginTop: 10,
       marginRight: 4,
-      minWidth: 126,
+      minWidth: 38,
       gridArea: 'trash',
       color: 'cyan',
       transition: 'all 300ms var(--ease-out)',
@@ -114,6 +115,20 @@ const useStyles = makeStyles({
       }
     }
   },
+  downloadButton: {
+    '&.MuiButton-root': {
+      gridArea: 'dl',
+      borderRadius: 4,
+      minWidth: 126,
+      color: 'var(--lt-blue)',
+      backgroundColor: 'var(--white)',
+      margin: '10px 4px 0 0',
+      '&:hover': {
+        color: 'var(--d-blue)',
+        backgroundColor: 'var(--white)'
+      }
+    }
+  },
   editor: {
     '& .MuiPaper-root': {
       minWidth: 680,
@@ -126,6 +141,9 @@ const useStyles = makeStyles({
       backgroundColor: 'var(--red)',
       color: 'white'
     }
+  },
+  nameField: {
+    gridArea: 'field'
   }
 })
 
@@ -316,6 +334,21 @@ function SoundEditor({ sound, session, transport }: SoundEditorProps): JSX.Eleme
     session.deleteEditSound()
   }
 
+  const handleDownloadSound = () => {
+    if (!sound.file) { return }
+    /* 
+     * if you're wondering why this is here and not in the client, it's because
+     * this requires access to a specific web feature that wouldn't be portable
+     * to node
+     */
+    const a = document.createElement('a')
+    const href = URL.createObjectURL(sound.file)
+    a.href = href 
+    a.setAttribute('download', sound.getPrettyName())
+    a.click()
+    URL.revokeObjectURL(href)
+  }
+
   const handleChangeSoundName = (newValue: string) => {
     transport.setSoundName({ sound, name: newValue })
   }
@@ -338,13 +371,14 @@ function SoundEditor({ sound, session, transport }: SoundEditorProps): JSX.Eleme
       className={ classes.root }
     >
       <FormField
-        fragment={ true }
         name="name"
-        label="Sound Name"
+        noLabel
+        fragment
         fieldValue={ soundName }
         setFieldValue={ setSoundName }
         validation={ Validation.validateSafeText }
         onChange={ handleChangeSoundName }
+        className={ classes.nameField }
       />
       <div className={ classes.vis }>
         { !frames &&
@@ -449,12 +483,23 @@ function SoundEditor({ sound, session, transport }: SoundEditorProps): JSX.Eleme
         { existingSound ? 'SAVE' : 'UPLOAD' }
       </Button>
       { existingSound &&
-        <ChargeButton
-          className={ classes.deleteButton }
-          onConfirm={ handleDeleteSound }
-        >
-          <DeleteIcon/>
-        </ChargeButton>
+        [ 
+          <ChargeButton
+            key="delete-button"
+            className={ classes.deleteButton }
+            onConfirm={ handleDeleteSound }
+          >
+            <DeleteIcon/>
+          </ChargeButton>,
+          <Button
+            key="download-button"
+            className={ classes.downloadButton }
+            onClick={ handleDownloadSound }
+            variant="contained"
+          >
+            <SaveAltIcon/>
+          </Button>
+        ]
       }
     </div>
   )

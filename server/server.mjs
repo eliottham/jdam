@@ -889,7 +889,7 @@ app.get('/sessions/:sessionId/stream/download/:fileId', useAuth(async (req, res)
     }
 
     res.writeHead(200, {
-      'Content-Type': fileType
+      'Content-Type': mime.contentType(fileType) || fileType
     })
 
     writeStream.pipe(res)

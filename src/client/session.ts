@@ -537,6 +537,8 @@ class Session extends Evt implements ITransport {
 
   async downloadSoundFile(uid: string) {
 
+    const sound = this.sounds.get(uid)
+
     const maxAttempts = 3
 
     /* 
@@ -554,7 +556,8 @@ class Session extends Evt implements ITransport {
         return {}
       }
 
-      const fileType = contentType?.split(';')[0].split('/')[1]
+      let fileType = contentType?.split(';')[0].split('/')[1]
+      if (!fileType) { fileType = 'flac' }
 
       const blob = await response.blob()
 
@@ -577,8 +580,6 @@ class Session extends Evt implements ITransport {
     if (!file || !audioBuffer) { return }
 
     this.fire('download-sound-file', { file })
-
-    const sound = this.sounds.get(uid)
 
     if (sound) {
       try {
@@ -785,7 +786,6 @@ class Session extends Evt implements ITransport {
     /* transport will also fire the event for the sound object */
     if (sound === this._editingSound) {
       this._editorTransport.setSoundFile({ file, audioBuffer, frames, ms, sound })
-      this._editorTransport.resetSoundStops({ sound })
     } else {
       this.transport.setSoundFile({ file, audioBuffer, frames, ms, sound })
     }

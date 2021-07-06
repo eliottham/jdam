@@ -85,6 +85,18 @@ class Sound extends Evt {
     return [ 0, 100, ms - 100, ms ]
   }
 
+  getPrettyName(ext = ''): string {
+    if (!this.name) { return this.uid }
+
+    if (this.file && !ext) {
+      ext = this.file.type.split(';')[0].split('/')[1]
+    }
+
+    if (!ext) { ext = 'flac' }
+
+    return `${this.name.toLowerCase().replace(/\s+/g, '_')}.${ext}`
+  }
+
 }
 
 export default Sound

@@ -99,16 +99,18 @@ function SoundInfo({ sound, session }: SoundInfoProps): JSX.Element {
         <div className="label">{ sound.name }</div>
         { !sound.ownerNode && <div className="sub-label">NO NODE</div> }
       </div>
-      { !sound.ownerNode &&
+      { (sound.canEdit && !sound.ownerNode) &&
         <SoundAssigner
           className={ classes.assigner }
           session={ session }
           sound={ sound }
         />
       }
-      <EditSoundIcon
-        onClick={ handleOnEditSound }
-      />
+      { sound.canEdit &&
+        <EditSoundIcon
+          onClick={ handleOnEditSound }
+        />
+      }
     </ListItem>
   )
 }
