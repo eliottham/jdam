@@ -252,7 +252,7 @@ function TrackView({
     node.delete()
   }
 
-  const canDelete = !node.accountId || session?.client?.account?.id === node.accountId
+  // const canDelete = !node.accountId || session?.client?.account?.id === node.accountId
 
   return (
     <Fragment>
@@ -335,7 +335,7 @@ function TrackView({
             />
           ]
         }
-        { (transportControls && canDelete) && 
+        { transportControls && 
           <ChargeButton
             className={ `${classes.deleteButton} ${playState !== 'stopped' ? 'disabled' : ''}` }
             onConfirm={ handleOnDeleteNode }

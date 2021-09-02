@@ -182,7 +182,8 @@ class Session extends Evt implements ITransport {
     const newSounds = new Map<string, Sound>()
     for (const sound of sounds) {
       const newSound = new Sound(sound)
-      newSound.canEdit = this.client.account.id === sound.accountId
+      // newSound.canEdit = this.client.account.id === sound.accountId
+      newSound.canEdit = true 
       newSounds.set(newSound.uid, newSound)
       if (!this.sounds.has(newSound.uid)) {
         this.sounds.set(newSound.uid, newSound)

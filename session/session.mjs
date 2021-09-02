@@ -350,7 +350,8 @@ function upsertSound(params = {}) {
      * allow account to update an existingSound, but only if that existingSound
      * has the same ownerNode already as the updated version
      */
-    if (existingSound.accountId !== params.reqAccount) {
+    if (existingSound.accountId &&
+      existingSound.accountId !== params.reqAccount) {
       throw Error('cannot update a sound from another account')
     }
 
