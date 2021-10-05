@@ -1,176 +1,83 @@
-import { useEffect, useState } from 'react'
+import React, { useState } from 'react'
+
 import AddIcon from '@material-ui/icons/Add'
 import GroupIcon from '@material-ui/icons/Group'
 
-import { BigAction, SlidingPageDialog, Form, FormSlider } from '../../comps/comps'
-import { FormFieldTemplate } from '../../comps/form_field'
-import { SlidingPageDialogProps } from '../../comps/sliding_page_dialog'
+import {
+  BigAction,
+  SlidingPageDialog,
+  FormDisplay,
+  FormSliderDisplay
+} from 'comps/comps'
+import { TextFormFieldDisplay } from 'comps/form_field'
+import { SlidingPageDialogProps } from 'comps/sliding_page_dialog'
 
-import JdamClient from '../../client/jdam_client'
-import Validation from '../../client/validation'
+import JdamClient from 'client/jdam_client'
 
 import MetronomeEditor from './metronome_editor'
-import JoinSession from './join_session'
-
-const fieldTemplates: FormFieldTemplate[] = [
-  {
-    name: 'title',
-    label: 'Session Title',
-    validation: Validation.validateSessionName
-  },
-  {
-    name: 'description',
-    label: 'Description',
-    validation: Validation.validateSafeText
-  },
-  {
-    name: 'length',
-    label: 'Session Length',
-    child: <FormSlider
-      fragment={ false }
-      name="length"
-      min={ 10 }
-      max={ 120 }
-      step={ 10 }
-    />
-  }
-]
+import SessionCreateForm, { MetronomeFormField } from 'client/forms/session_create_form'
+import { 
+  NumberFormField,
+  TextFormField
+} from 'client/forms/form'
 
 interface CreateSessionFormProps {
   client: JdamClient
-  errors?: string[]
-  showErrors?: boolean
-  formValid?: boolean
-  setFormValid?: (valid: boolean) => void
-  onSubmit: (params: { 
-    title: string,
-    description: string,
-    length: number,
-    bpm: number,
-    measures: number,
-    pattern: number[]
-  }) => void
   onSetHeight?: (height: number) => void
 }
 
-function CreateSessionForm(props: CreateSessionFormProps): JSX.Element {
+function CreateSessionForm({
+  client,
+  onSetHeight
+}: CreateSessionFormProps): JSX.Element {
 
-  const [ formValid, setFormValid ] = useState(false)
-  const [ scaledBpm, setScaledBpm ] = useState(120)
-  const [ pattern, setPattern ] = useState<number[]>([ 2, 1, 1, 1 ])
-  const [ measures, setMeasures ] = useState(2)
-
-  const onSubmitHandler = (params: { [index: string]: string }) => {
-    const { title, description, length } = params
-    ;(props.setFormValid ?? setFormValid)(false)
-    props.onSubmit({
-      title,
-      description,
-      length: Number(length) || 10,
-      bpm: scaledBpm,
-      measures,
-      pattern
-    })
-  }
-
-  const onSetBpm = (scaledBpm: number) => {
-    setScaledBpm(scaledBpm)
-  }
-
-  const onSetMeasures = (measures: number) => {
-    setMeasures(measures)
-  }
-
-  const onSetPattern = (pattern: number[]) => {
-    setPattern(pattern)
-  }
+  const [ model ] = useState(new SessionCreateForm({ client }))
 
   const autoHeight = (height: number) => {
-    props.onSetHeight?.(height)
+    onSetHeight?.(height)
   }
 
   return (
-    <Form
-      fieldTemplates={ fieldTemplates.concat([
-        {
-          name: 'metronome',
-          child: <MetronomeEditor
-            bpm={ 120 }
-            onSetBpm={ onSetBpm }
-            onSetMeasures={ onSetMeasures }
-            pattern={ [ 2, 1, 1, 1 ] }
-            onSetPattern={ onSetPattern }
-            metro={ props.client.metro }
-          />
-        } ]) 
-      }
-      onSubmit={ onSubmitHandler }
+    <FormDisplay
+      model={ model }
       submitText="Create"
-      formValid={ props.formValid ?? formValid }
-      setFormValid={ props.setFormValid ?? setFormValid }
-      errors={ props.errors }
-      showErrors={ props.showErrors }
       autoHeight={ autoHeight }
-    />
+    >
+      <TextFormFieldDisplay
+        fragment
+        model={ model.getField('title') as TextFormField }
+        label="Title"
+      />
+      <TextFormFieldDisplay
+        fragment
+        model={ model.getField('description') as TextFormField }
+        label="Description"
+      />
+      <FormSliderDisplay
+        fragment
+        model={ model.getField('length') as NumberFormField } 
+        label="Length"
+      />
+      <MetronomeEditor
+        model={ model.getField('metronome_editor') as MetronomeFormField }
+      />
+    </FormDisplay>
   )
 }
 
 export interface SessionDialogProps extends SlidingPageDialogProps {
   client: JdamClient
-  onConfirm: (params: { 
-    join: boolean,
-    title?: string,
-    description?: string,
-    length?: number,
-    sessionId?: string 
-  }) => void
 }
 
 function SessionDialog({
   open,
   onClose,
-  onConfirm,
   tabIndex,
   setTabIndex,
   ...props
 }: SessionDialogProps): JSX.Element {
 
-  const [ errors, setErrors ] = useState<string[]>([])
-  const [ showErrors, setShowErrors ] = useState(false)
-  const [ formValid, setFormValid ] = useState(false)
   const [ height, setHeight ] = useState(500)
-
-  useEffect(() => {
-    let timeoutIndex = -1
-
-    const onCreateSession = ({ errors = [] }: { errors: string[] }) => {
-      setErrors(errors)
-      setShowErrors(!!errors.length)
-      if (errors.length) {
-        if (timeoutIndex >= 0) { window.clearTimeout(timeoutIndex) }
-        timeoutIndex = window.setTimeout(() => {
-          setShowErrors(false)
-        }, 5000)
-      }
-    }
-
-    props.client.on('create-session', onCreateSession)
-    return () => {
-      props.client.un('create-session', onCreateSession)
-      props.client.metro.previewMetroStop()
-      window.clearTimeout(timeoutIndex)
-      if (!open) { setShowErrors(false) }
-    }
-  }, [ props.client, open ])
-
-
-  const handleOnCreateSession = (params: { title: string, description: string, length: number }) => {
-    onConfirm({ join: false, ...params })
-  }
-
-  const handleOnJoinSession = (id: string) => {
-    onConfirm({ join: true, sessionId: id })
-  }
 
   const onSetHeight = (height: number) => {
     setHeight(Math.max(500, height))
@@ -182,30 +89,33 @@ function SessionDialog({
       height={ height }
       onClose={ onClose }
       tabIndex={ tabIndex }
-      setTabIndex={ setTabIndex } 
+      setTabIndex={ setTabIndex }
       disableBackdropClose={ true }
       { ...props }
     >
       <>
-        <BigAction label="CREATE" onClick={ () => { setTabIndex(1) } }>
-          <AddIcon/>
+        <BigAction
+          label="CREATE"
+          onClick={ () => {
+            setTabIndex(1)
+          } }
+        >
+          <AddIcon />
         </BigAction>
-        <BigAction label="JOIN" onClick={ () => { setTabIndex(2) } }>
-          <GroupIcon/>
+        <BigAction
+          label="JOIN"
+          onClick={ () => {
+            setTabIndex(2)
+          } }
+        >
+          <GroupIcon />
         </BigAction>
       </>
       <CreateSessionForm
         client={ props.client }
-        onSubmit={ handleOnCreateSession }
-        errors={ errors }
-        showErrors={ showErrors }
-        formValid={ formValid }
-        setFormValid={ setFormValid }
         onSetHeight={ onSetHeight }
       />
-      <JoinSession
-        client={ props.client }
-      />
+      <div/>
     </SlidingPageDialog>
   )
 }

@@ -22,7 +22,9 @@
     "react/react-in-jsx-scope": "off",
     "@typescript-eslint/explicit-function-return-type": "off",
     "@typescript-eslint/explicit-module-boundary-types": "off",
-    "react/jsx-curly-spacing": ["error", { "when": "always" }]
+    "react/jsx-curly-spacing": ["error", { "when": "always" }],
+    "quotes": ["error", "single"],
+    "jsx-quotes": ["error", "prefer-double"]
   },
   "settings": {
     "react": {

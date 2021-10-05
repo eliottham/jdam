@@ -1,4 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import React, {
+  useState, 
+  useEffect,
+  useRef 
+} from 'react'
 
 import Draggable from '../../../comps/draggable'
 import { 
@@ -101,7 +105,7 @@ function StopHandle({
     }
   }
 
-  const handleOnChanging = (initX: number, initY: number, diffX: number, diffY: number) => {
+  const handleOnChanging = (initX: number, initY: number, diffX: number) => {
     /* do something */
     const newVal = Math.max(min ?? 0, Math.min(max || totalWidth, initX + diffX))
     setXValue(newVal)
@@ -111,7 +115,7 @@ function StopHandle({
     onChanged?.(initX, newVal)
   }
 
-  const handleOnChanged = (initX: number, initY: number, diffX: number, diffY: number) => {
+  const handleOnChanged = (initX: number, initY: number, diffX: number) => {
     /* do something */
     const newVal = Math.max(min ?? 0, Math.min(max || totalWidth, initX + diffX))
     onChanging?.(initX, newVal)

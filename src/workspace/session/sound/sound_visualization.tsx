@@ -1,4 +1,9 @@
-import { useRef, useEffect, CanvasHTMLAttributes } from 'react'
+import React, {
+  useRef,
+  useEffect,
+  CanvasHTMLAttributes 
+} from 'react'
+
 import Sound from '../../../client/sound'
 import colorize from '../../../client/colorize'
 

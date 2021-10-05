@@ -1,4 +1,8 @@
-import React, { useEffect, useState, forwardRef } from 'react'
+import React, {
+  useState,
+  forwardRef 
+} from 'react'
+
 import { makeStyles } from '@material-ui/styles'
 
 interface DraggableProps {

@@ -1,8 +1,7 @@
+import React from 'react'
+
 import JdamClient from '../../client/jdam_client'
 
-import { useState } from 'react'
-
-import React from 'react'
 import Button from '@material-ui/core/Button'
 import Dialog from '@material-ui/core/Dialog'
 import DialogActions from '@material-ui/core/DialogActions'
@@ -61,31 +60,3 @@ function JoinSessionFromUrl({
 }
 
 export { JoinSessionFromUrl }
-
-interface JoinSessionProps {
-  client: JdamClient
-}
-
-function JoinSession({ client }: JoinSessionProps): JSX.Element {
-
-  
-
-  /* create a wrapped debounce function */
-  const debounce = (fn: (evt: React.ChangeEvent<HTMLInputElement>) => void, delay = 500) => {
-    let timeoutId: number
-
-    return (evt: React.ChangeEvent<HTMLInputElement>) => {
-      window.clearTimeout(timeoutId)
-      timeoutId = window.setTimeout(() => {
-        fn(evt)
-      }, delay)
-    }
-  }
-
-  return (
-    <div>
-    </div>
-  )
-}
-
-export default JoinSession

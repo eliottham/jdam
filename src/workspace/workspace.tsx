@@ -1,4 +1,8 @@
-import { useEffect, useState, Fragment } from 'react'
+import React, {
+  useEffect, 
+  useState,
+  Fragment 
+} from 'react'
 import {
   Drawer,
   Divider,
@@ -16,7 +20,7 @@ import {
   Switch,
   Route,
   Link
-} from "react-router-dom"
+} from 'react-router-dom'
 
 import SessionDialog from './session/session_dialog'
 import SessionView from './session/session_view'
@@ -118,35 +122,6 @@ function Workspace(props: { client: JdamClient }) {
     setCreatingSession(true)
   }
 
-  const handleOnSubmitSession = ({ 
-    join = false,
-    title = '',
-    description = '',
-    length,
-    sessionId = '',
-    bpm = 120,
-    pattern = [ 2, 1, 1, 1 ]
-  }: { 
-    join: boolean,
-    title?: string,
-    description?: string,
-    length?: number,
-    sessionId?: string,
-    bpm?: number,
-    pattern?: number[]
-  }) => {
-    if (!join) { 
-      props.client.createSession({ 
-        title,
-        description,
-        sessionLength: length,
-        bpm,
-        pattern
-      })
-    }
-    else { props.client.joinSession({ sessionId }) }
-  }
-
   const handleOnCloseSessionDialog = () => {
     setCreatingSession(false)
     setTabIndex(0)
@@ -199,7 +174,6 @@ function Workspace(props: { client: JdamClient }) {
             tabIndex={ tabIndex }
             setTabIndex={ setTabIndex }
             onClose={ handleOnCloseSessionDialog }
-            onConfirm={ handleOnSubmitSession }
           />
         </Drawer>
         {/* <div className="content">  */}

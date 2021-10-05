@@ -1,6 +1,12 @@
-import { useState, useEffect } from 'react'
+import React, {
+  useState,
+  useEffect
+} from 'react'
+
 import { LinearProgress } from '@material-ui/core'
 import { makeStyles } from '@material-ui/styles'
+import { FormField } from 'client/forms/form'
+import { LatentStatus } from 'client/validation'
 
 const useStyles = makeStyles({
   formLabel: {
@@ -46,17 +52,20 @@ const useStyles = makeStyles({
         color: 'var(--lt-grey)',
         fontVariant: 'all-small-caps',
         fontWeight: 400,
-        fontFamily: "'Lato', sans-serif"
+        fontFamily: '\'Lato\', sans-serif'
       }
     },
-    '&.confirm input': {
-      '&:first-child': {
+    '&.confirm': {
+      '& .upper-field input': {
         borderRadius: '4px 4px 0 0',
         borderBottomColor: 'var(--lt-grey)'
       },
-      '&.confirm': {
+      '& .lower-field input': {
         borderTop: 'none',
         borderRadius: '0 0 4px 4px'
+      },
+      '& $formField': {
+        margin: 0
       }
     },
     '& .error': {
@@ -65,181 +74,211 @@ const useStyles = makeStyles({
   }
 })
 
-export interface FormFieldTemplate<valueType=string> {
-    name: string
-    child?: React.ReactNode
-    label?: string
-    type?: string
-    confirm?: boolean
-    validation?: (input: valueType) => string[],
-    latentValidation?: (input: valueType) => Promise<string[]>
-    hint?: string
+export interface FormFieldDisplayProps<ValueType> {
+  model: FormField<ValueType>
+  label?: string
+  fragment?: boolean
+  noLabel?: boolean
+  className?: string
+  hidePending?: boolean
+  hideErrors?: boolean
+  children?: React.ReactNode
 }
 
-export interface FormFieldProps<valueType=string> extends FormFieldTemplate<valueType> {
-    fragment?: boolean
-    fieldValue?: string
-    setFieldValue?: (newValue: string) => void
-    validate?: boolean
-    onChange?: (newValue: valueType) => void
-    onValidate?: (valid: boolean) => void
-    onEnter?: (value: valueType, confirm: boolean) => void
-    children?: React.ReactNode
-    noLabel?: boolean
-    className?: string
-}
-
-function FormField({
+function FormFieldDisplay<ValueType>({
+  model,
+  label,
   fragment = false,
-  fieldValue, 
-  validation,
-  confirm,
-  validate,
-  onValidate = () => { /* noop */ },
-  latentValidation,
   noLabel = false,
-  ...props }: FormFieldProps): JSX.Element {
+  className,
+  hidePending = true,
+  hideErrors = true,
+  children,
+  ...props 
+}: FormFieldDisplayProps<ValueType>): JSX.Element {
 
   const classes = useStyles()
 
   const [ validationErrors, setValidationErrors ] = useState<string[]>([])
-  const [ inputValue, setInputValue ] = useState('')
-  const [ confirmValue, setConfirmValue ] = useState('')
-  const [ pendingValidation, setPendingValidation ] = useState(false)
+  const [ inputValue, setInputValue ] = useState<ValueType>()
+  const [ pendingValidation, setPendingValidation ] = useState(model.pendingValidation)
+  const [ showErrors, setShowErrors ] = useState(false)
 
   useEffect(() => {
-
-    let timeoutIndex = -1
-
-    const validateFieldValue = (input: string): boolean => {
-      let valid = false
-      setPendingValidation(false)
-      if (validation) {
-        const errors = validation(input)
-        if (confirm && input !== confirmValue) {
-          errors.push('values do not match') 
-        }
-        valid = !!input && !errors.length
-        setValidationErrors(errors)
-      } 
-
-      /* 
-       * perform latent validation after validating, but skip if input is blank
-       * or already invalid
-       */
-      if (validate && latentValidation && valid && input) {
-        if (timeoutIndex >= 0) { window.clearTimeout(timeoutIndex) }
-        setPendingValidation(true)
-        onValidate(false)
-        timeoutIndex = window.setTimeout(async () => {
-          if (latentValidation && input) {
-            const errors = await latentValidation(input)
-            setPendingValidation(false)
-            onValidate(!errors.length)
-            setValidationErrors(errors)
-          }
-        }, 1500)
-      } else {
-        onValidate(valid)
-      }
-      return valid
-    }
-
-    !props.children && validateFieldValue(fieldValue ?? inputValue)
-
-    return () => {
-      if (timeoutIndex) { window.clearTimeout(timeoutIndex) }
-    }
-  }, [ 
-    fieldValue,
-    inputValue,
-    confirm,
-    latentValidation,
-    validate,
-    confirmValue,
-    validation 
-  ])
-
-  const onChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
-    (props.setFieldValue ?? setInputValue)(evt.target.value)
-    props.onChange?.(evt.target.value)
-  }
-
-  /* 
-   * on confirm should only check if the confirmation value is the same as the
-   * regular field value 
-   */
-  const onConfirm = (evt: React.ChangeEvent<HTMLInputElement>) => {
-    setConfirmValue(evt.target.value)
-    let valid = true
-    if (validate && validation && confirm) {
-      /* 
-       * get any existing validation errors and then append a new error if the
-       * values don't match
-       */
-      const errors = validation(fieldValue ?? inputValue)
-      if (evt.target.value !== fieldValue ?? inputValue) {
-        errors.push('values do not match') 
-      }
-      valid = !errors.length
+    const onValidationErrors = ({ errors }: { errors: string[] }) => {
+      setShowErrors(!!errors.length)
       setValidationErrors(errors)
     }
-    onValidate(valid)
-  }
 
-  const onKeyupHandler = (evt: React.KeyboardEvent<HTMLInputElement>) => {
-    if (props.onEnter && evt.keyCode === 13) {
-      const isConfirm = !!evt.currentTarget.getAttribute('confirm')
-      props.onEnter(fieldValue ?? inputValue, isConfirm)
+    const onPendingValidation = ({ status }: { status: LatentStatus }) => {
+      setShowErrors(false)
+      setPendingValidation(status === 'pending')
     }
+
+    const onSetValue = ({ value }: { value: ValueType }) => {
+      setInputValue(value) 
+    }
+
+    model.on('validate', onValidationErrors)
+    model.on('pending', onPendingValidation)
+    model.on('set-value', onSetValue)
+
+    model.setValue(model.getValue())
+
+    return () => {
+      model.un('validate', onValidationErrors)
+      model.un('pending', onPendingValidation)
+      model.un('set-value', onSetValue)
+    }
+  }, [ model ])
+
+  const classNames = []
+
+  if (validationErrors.length) {
+    classNames.push('errors')
   }
 
-  const className = pendingValidation ? 'pending' : (validation && validationErrors.length ? 'invalid' : '')
-  const filled = (fieldValue ?? inputValue) && validation ? 'filled' : ''
-  const confirmFilled = confirmValue && validation ? 'filled' : ''
-  const useChildren = !!props.children
+  if (inputValue) {
+    classNames.push('filled')
+  }
 
-  const children = [
-    <div className={ `${classes.formField} ${props.className || ''} ${confirm ? 'confirm' : ''}` } key={ `field-${props.name}` }>
-      { useChildren && props.children }
-      { !useChildren &&
-        <input 
-          type={ props.type ? props.type : "text" }
-          className={ `form-input ${className} ${filled ? 'filled' : ''}` } 
-          onChange={ onChange }
-          value={ fieldValue ?? inputValue }
-          onKeyUp={ onKeyupHandler }
-          { ...props.hint && { placeholder: props.hint } }
-        />
-      }
-      { (!useChildren && confirm) &&
-        <input 
-          type={ props.type ? props.type : "text" }  
-          className={ `form-input confirm ${className} ${confirmFilled ? 'filled' : ''}` }
-          onChange={ onConfirm } 
-          placeholder={ `Confirm ${props.label}` }
-          onKeyUp={ onKeyupHandler }
-          { ...{confirm: 'confirm'} }
-        />
-      }
+  if (pendingValidation) {
+    classNames.push('pending-latent')
+  }
+
+  const childrenProcedural = [
+    <div 
+      className={ `${classes.formField} ${className || ''} ${classNames.join(' ')}` } key={ `field-${model.name}` }
+      { ...props }
+    >
+      { children }
       {
-        pendingValidation && <LinearProgress/>
+        pendingValidation && !hidePending ? <LinearProgress/> : null
       }
-      {
-        (validate && validation) && validationErrors.map((err, index) => {
-          return <div className="error" key={ `${props.label}-err-${index}` }>{ err }</div>
-        })
+      { 
+        !hideErrors && showErrors ?
+          <div>
+            { validationErrors.map((error, index) => {
+              return <div key={ index } className="error">{ error }</div>
+            })
+            }
+          </div>
+          :
+          null
       }
     </div>
   ]
 
   if (!noLabel) { 
-    children.unshift(
-      <div className={ classes.formLabel } key={ `label-${props.name}` }>{ props.label ? props.label : '' }</div>
+    childrenProcedural.unshift(
+      <div className={ classes.formLabel } key={ `label-${model.name}` }>{ label ? label : '' }</div>
     )
   }
 
-  return React.createElement(fragment ? React.Fragment : 'div', { ...!fragment && { className: classes.formField }}, children)
+  return React.createElement(fragment ? React.Fragment : 'div', { ...!fragment && { className: classes.formField }}, childrenProcedural)
 }
 
-export default FormField
+interface TextFormFieldDisplayProps extends FormFieldDisplayProps<string> {
+  hint?: string
+  enableEnterKey?: boolean
+  type?: 'text' | 'password'
+  onEnter?: () => void
+}
+
+function TextFormFieldDisplay({ 
+  model,
+  hint,
+  enableEnterKey = false,
+  onEnter,
+  type = 'text',
+  hidePending = false,
+  hideErrors = false,
+  ...props
+}: TextFormFieldDisplayProps): JSX.Element {
+
+  const [ inputValue, setInputValue ] = useState(model.getValue() || '')
+
+  useEffect(() => {
+
+    const onSetInputValue = ({ value }: { value: string }) => {
+      setInputValue(value)
+    }
+
+    model.on('set-value', onSetInputValue)
+
+    return () => {
+      model.un('set-value', onSetInputValue)
+    }
+  }, [ model ])
+
+  const onChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
+    model.setValue(evt.currentTarget.value)
+  }
+
+  const onKeyupHandler = (evt: React.KeyboardEvent<HTMLInputElement>) => {
+    if (enableEnterKey && evt.key === 'Enter') {
+      model.setValue(evt.currentTarget.value)
+      onEnter?.()
+    }
+  }
+
+  return (
+    <FormFieldDisplay<string>
+      model={ model }
+      hidePending={ hidePending }
+      hideErrors={ hideErrors }
+      { ...props }
+    >
+      <input 
+        type={ type }
+        onChange={ onChange }
+        value={ inputValue }
+        onKeyUp={ onKeyupHandler }
+        { ...hint && { placeholder: hint } }
+      />
+    </FormFieldDisplay>
+  )
+}
+
+export default FormFieldDisplay
+export { TextFormFieldDisplay }
+
+interface ConfirmTextFormFieldDisplayProps extends TextFormFieldDisplayProps {
+  confirmModel: FormField<string>
+}
+
+function ConfirmTextFormFieldDisplay({ 
+  model,
+  confirmModel,
+  hint,
+  type,
+  ...props
+}: ConfirmTextFormFieldDisplayProps): JSX.Element {
+
+  return (
+    <FormFieldDisplay<string>
+      className="confirm"
+      model={ model }
+      { ...props }
+      hideErrors={ false }
+    >
+      <TextFormFieldDisplay
+        className="upper-field"
+        noLabel
+        model={ model }
+        type={ type }
+        hideErrors
+      />
+      <TextFormFieldDisplay
+        className="lower-field"
+        noLabel
+        hint={ hint }
+        model={ confirmModel }
+        type={ type }
+        hideErrors
+      />
+    </FormFieldDisplay>
+  )
+}
+
+export { ConfirmTextFormFieldDisplay }

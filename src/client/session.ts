@@ -4,15 +4,16 @@ import Settings from './settings'
 import JdamClient from './jdam_client'
 import UID from './uid'
 import Metro from './metro'
-import Sound, { SoundParams, Frames } from './sound'
+import Sound, {
+  SoundParams, Frames 
+} from './sound'
 import Transport, { ITransport } from './sound_transport'
 import SoundRecorder from './sound_recorder'
+import {JSObject} from './types'
 
 export interface SessionSettingsParams {
   setting1: string
 }
-
-type GenericResponse = { [index: string]: any }
 
 class SessionSettings extends Settings {
 }
@@ -114,11 +115,11 @@ class Session extends Evt implements ITransport {
     this.masterGain = this.audioCtx.createGain()
     this.masterGain.connect(this.audioCtx.destination)
 
-    this.transport.on('set-play-state', (params: GenericResponse) => {
+    this.transport.on('set-play-state', (params: JSObject) => {
       this.fire('set-play-state', params)
     })
 
-    this.transport.on('set-playhead', (params: GenericResponse) => {
+    this.transport.on('set-playhead', (params: JSObject) => {
       this.fire('set-playhead', params)
     })
 
@@ -232,7 +233,7 @@ class Session extends Evt implements ITransport {
     }))
   }
 
-  handleResponse(params: GenericResponse) {
+  handleResponse(params: JSObject) {
     /* TODO: all of the possible responses */
 
     /* if you're wondering why it's a bunch of if statements instead of an
@@ -265,7 +266,7 @@ class Session extends Evt implements ITransport {
       const existingNodeSet = this.rootNode.flatMap()
 
       const rootTemplate = params.root
-      const recurse = (nodeTemplate: GenericResponse, parent?: LoopNode): LoopNode => {
+      const recurse = (nodeTemplate: JSObject, parent?: LoopNode): LoopNode => {
         let result = existingNodeSet.get(nodeTemplate.uid)
 
         if (result) {
@@ -281,7 +282,7 @@ class Session extends Evt implements ITransport {
           })
         }
 
-        result.setChildren(nodeTemplate.children?.map((childTemplate: GenericResponse) => recurse(childTemplate, result)))
+        result.setChildren(nodeTemplate.children?.map((childTemplate: JSObject) => recurse(childTemplate, result)))
         return result
       }
       const newRoot = recurse(rootTemplate)
@@ -349,7 +350,7 @@ class Session extends Evt implements ITransport {
     } 
 
     if (params.addedSound || params.updatedSound) {
-      const soundParams = (params.addedSound || params.updatedSound) as GenericResponse
+      const soundParams = (params.addedSound || params.updatedSound) as JSObject
 
       const { 
         accountId,
@@ -802,7 +803,7 @@ class Session extends Evt implements ITransport {
     if (typeof end === 'number') {
       urlParams.append('end', '' + end)
     }
-    const response = await fetch(`/waves/trim`, {
+    const response = await fetch('/waves/trim', {
       method: 'POST',
       headers: {
         'Content-Type': file.type
@@ -821,7 +822,7 @@ class Session extends Evt implements ITransport {
   }
 
   async getSoundPeaks({ file }: { file: File }) {
-    const response = await fetch(`/waves/peaks`, {
+    const response = await fetch('/waves/peaks', {
       method: 'POST',
       headers: {
         'Content-Type': file.type
@@ -883,8 +884,8 @@ class Session extends Evt implements ITransport {
     this.transport.setSounds({ sounds })
   }
 
-  async playChain({ endNode }: { endNode?: LoopNode }) {
-    await this.routeChain({ endNode })
+  playChain({ endNode }: { endNode?: LoopNode }) {
+    this.routeChain({ endNode })
     this.play()
   }
 

@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react'
+import React, {
+  useEffect,
+  useState 
+} from 'react'
 
-import { IconButton, Slider } from '@material-ui/core'
+import {
+  IconButton,
+  Slider 
+} from '@material-ui/core'
 
 import AddIcon from '@material-ui/icons/Add'
 import RemoveIcon from '@material-ui/icons/Remove'
@@ -9,7 +15,7 @@ import StopIcon from '@material-ui/icons/Stop'
 
 import { makeStyles } from '@material-ui/styles'
 
-import Metro from '../../client/metro'
+import { MetronomeFormField } from 'client/forms/session_create_form'
 
 const metroBeatSize = 48
 
@@ -142,15 +148,6 @@ function MetroBeat({
 
 }
 
-interface MetronomeProps {
-  bpm: number
-  pattern: number[]
-  onSetBpm: (bpm: number) => void
-  onSetMeasures: (measures: number) => void
-  onSetPattern: (pattern: number[]) => void
-  metro: Metro
-}
-
 const marks = [
   {
     value: 100,
@@ -197,19 +194,26 @@ const unscaleFunction = (value: number): number => {
   return Math.floor(result)
 }
 
-function MetronomeEditor(props: MetronomeProps): JSX.Element {
+interface MetronomeEditorProps {
+  model: MetronomeFormField
+}
+
+function MetronomeEditor({ model }: MetronomeEditorProps): JSX.Element {
 
   const classes = useStyles()
 
-  const [ sliderValue, setSliderValue ] = useState(unscaleFunction(props.bpm))
-  const [ bpmLabel, setBpmLabel ] = useState(props.bpm)
-  const [ pattern, setPattern ] = useState<number[]>(props.pattern)
+  const [ sliderValue, setSliderValue ] = useState(unscaleFunction(model.getValue()?.bpm || 100))
+  const [ bpmLabel, setBpmLabel ] = useState(model.getValue()?.bpm || 100)
+  const [ pattern, setPattern ] = useState<number[]>(model.getValue()?.pattern || [ 2, 1, 1, 1 ])
   const [ measures, setMeasures ] = useState(4)
-  const [ enablePreview, setEnablePreview ] = useState(!!props.metro.clickPrefixName)
-  const [ playing, setPlaying ] = useState(props.metro.playing)
+  const [ enablePreview, setEnablePreview ] = useState(!!model.metro.clickPrefixName)
+  const [ playing, setPlaying ] = useState(model.metro.playing)
 
   useEffect(() => {
     /* do nothing */  
+
+    const metro = model.metro
+
     const onGetClicks = () => {
       setEnablePreview(true)
     }
@@ -222,17 +226,17 @@ function MetronomeEditor(props: MetronomeProps): JSX.Element {
       setPlaying(false)
     }
 
-    props.metro.getClicks('click')
-    props.metro.on('get-clicks', onGetClicks)
-    props.metro.on('metro-start', onMetroStart)
-    props.metro.on('metro-stop', onMetroStop)
+    metro.getClicks('click')
+    metro.on('get-clicks', onGetClicks)
+    metro.on('metro-start', onMetroStart)
+    metro.on('metro-stop', onMetroStop)
     
     return () => {
-      props.metro.un('get-clicks', onGetClicks)
-      props.metro.un('metro-start', onMetroStart)
-      props.metro.un('metro-stop', onMetroStop)
+      metro.un('get-clicks', onGetClicks)
+      metro.un('metro-start', onMetroStart)
+      metro.un('metro-stop', onMetroStop)
     }
-  }, [ props.metro ])
+  }, [ model.metro ])
 
   const handleSliderChange = (event: Event, newValue: number | number[]) => {
     let value = newValue
@@ -244,8 +248,8 @@ function MetronomeEditor(props: MetronomeProps): JSX.Element {
     const { value: scaledValue, label } = scaleFunction(value) 
     setSliderValue(value) 
     setBpmLabel(label)
-    props.onSetBpm(scaledValue)
-    props.metro.previewMetroSet({ bpm: scaledValue })
+    model.setBpm(scaledValue)
+    model.metro.previewMetroSet({ bpm: scaledValue })
   }
 
   const handleMeasuresChange = (event: Event, newValue: number | number[]) => {
@@ -256,22 +260,23 @@ function MetronomeEditor(props: MetronomeProps): JSX.Element {
       value = newValue
     }
     setMeasures(value)
-    props.onSetMeasures(value)
+    model.setMeasures(value)
   }
 
   const handleBeatChange = (index: number, newValue: number) => {
     const newPattern = pattern.slice()
     newPattern[index] = newValue
     setPattern(newPattern)
-    props.onSetPattern(newPattern)
-    props.metro.previewMetroSet({ pattern: newPattern })
+    model.setPattern(newPattern)
+    model.metro.previewMetroSet({ pattern: newPattern })
   }
 
   const handlePatternAdd = () => {
     if (pattern.length < 19) { 
       const newPattern = pattern.concat([ pattern[pattern.length - 1] ])
       setPattern(newPattern)
-      props.metro.previewMetroSet({ pattern: newPattern })
+      model.setPattern(newPattern)
+      model.metro.previewMetroSet({ pattern: newPattern })
     }
   }
 
@@ -279,17 +284,18 @@ function MetronomeEditor(props: MetronomeProps): JSX.Element {
     if (pattern.length > 1) { 
       const newPattern = pattern.slice(0, -1)
       setPattern(newPattern) 
-      props.metro.previewMetroSet({ pattern: newPattern })
+      model.setPattern(newPattern)
+      model.metro.previewMetroSet({ pattern: newPattern })
     }
   }
 
   const handleOnStart = () => {
     const { value: scaledValue } = scaleFunction(sliderValue) 
-    props.metro.previewMetroStart({ bpm: scaledValue, pattern })
+    model.metro.previewMetroStart({ bpm: scaledValue, pattern })
   }
 
   const handleOnStop = () => {
-    props.metro.previewMetroStop()
+    model.metro.previewMetroStop()
   }
 
   return (

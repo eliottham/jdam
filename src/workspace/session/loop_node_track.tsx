@@ -1,12 +1,18 @@
+import React, {
+  useEffect, 
+  useState,
+  Fragment 
+} from 'react'
+
 import LoopNode from '../../client/loop_node'
 import SoundVisualization from './sound/sound_visualization'
 import Sound from '../../client/sound'
 import Transport from '../../client/sound_transport'
 import Session from '../../client/session'
 
-import { useEffect, useState, Fragment } from 'react'
-
-import { IconButton, Fab, Button } from '@material-ui/core'
+import {
+  IconButton, Fab, Button 
+} from '@material-ui/core'
 
 import Knob from '../../comps/knob'
 import ChargeButton from '../../comps/charge_button'
@@ -18,13 +24,17 @@ import StopIcon from '@material-ui/icons/Stop'
 import PauseIcon from '@material-ui/icons/Pause'
 import FiberManualRecordIcon from '@material-ui/icons/FiberManualRecord'
 import DeleteIcon from '@material-ui/icons/Delete'
-import { WaveformIcon, EditSoundIcon } from '../../comps/icons'
+import {
+  WaveformIcon, EditSoundIcon 
+} from '../../comps/icons'
 
 const nodeWidth = 500
 const nodeHeight = 300
 const trackHeight = 100
 const controlsWidth = 110
-export { nodeWidth, nodeHeight, trackHeight, controlsWidth }
+export {
+  nodeWidth, nodeHeight, trackHeight, controlsWidth 
+}
 
 const useStyles = makeStyles({
   trackControls: {
@@ -153,7 +163,6 @@ interface TrackViewProps {
 
 function TrackView({
   node,
-  session,
   sound,
   ms,
   disabled = false,

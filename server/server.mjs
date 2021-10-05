@@ -220,10 +220,57 @@ async function getAccount({ hash, id, email }) {
   return account
 }
 
+// const b64Lut = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+// 
+// function convertTimestampToB64(timestamp) {
+//   /* this is required, otherwise bit-shifting doesn't work */
+//   const bigN = BigInt(timestamp)
+//   
+//   /* timestamp is a 64bit number which means it takes 10 shifts to represent in base64 */
+// 
+//   let output = new Array(10)
+// 
+//   for (let a = 0; a < 10; a++) {
+//     const currentN = bigN >> BigInt(a * 7) & 0x3Fn
+//     const b64Char = b64Lut.charAt(Number(currentN))
+//     output.push(b64Char)
+//   }
+// 
+//   return output.join('')
+// }
+// 
+// function convertB64ToTimestamp(b64) {
+// 
+//   let result = 0n 
+// 
+//   for (let a = 0; a < 10; a++) {
+//     const b64Char = b64.charCodeAt(a) 
+//     const shiftN = BigInt(a * 7)
+//     if (65 <= b64Char && b64Char <= 90) {
+//       /* A-Z */
+//       result |= BigInt(b64Char - 65) << shiftN
+//     } else if (97 <= b64Char && b64Char <= 122) {
+//       /* a-z */
+//       result |= BigInt(b64Char - 71) << shiftN
+//     } else if (48 <= b64Char && b64Char <= 57) {
+//       /* 0-9 */
+//       result |= BigInt(b64Char + 4) << shiftN
+//     } else if (b64Char === 43) {
+//       /* + */
+//       result |= 62 << shiftN
+//     } else if (b64Char === 47) {
+//       /* / */
+//       result |= 63 << shiftN
+//     }
+//   }
+// 
+//   return Number(result)
+// }
+
 /* this should probably be something like a JWT */
 function generateSessionToken(withAccountId) {
   const date = new Date()
-  const b64 = generateRandomBitString(24)
+  let b64 = generateRandomBitString(24)
   authSessionMap.set(b64, { expires: date.valueOf() + EXPIRATION_THRESHOLD, ...!!withAccountId && { id: withAccountId }})
   if (withAccountId) { accountAuthMap.set(withAccountId, b64) }
   return b64

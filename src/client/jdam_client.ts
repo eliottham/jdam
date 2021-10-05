@@ -274,14 +274,13 @@ class JdamClient extends Evt {
     })
   }
 
-  async createAccount(params: { email: string, password: string, nickname?: string} ) {
+  async createAccount({ email, password, nickname }: { email: string, password: string, nickname?: string} ) {
 
     const encoder = new TextEncoder()
-    const { email, password } = params
 
     let hash = ''
     const hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${password}`)))
-    if (email && password) hash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))
+    if (email && password) hash = window.btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))
 
     try {
       const response = await fetch('/account', {
@@ -289,7 +288,7 @@ class JdamClient extends Evt {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email, hash, nickname: params.nickname })
+        body: JSON.stringify({ email, hash, nickname })
       })
       const responseJson = await response.json()
       const { errors, account } = responseJson
@@ -402,13 +401,13 @@ class JdamClient extends Evt {
     let hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${this.account.email}${currentPassword}`)))
 
     if (this.account.email && currentPassword) {
-      currentHash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))    
+      currentHash = window.btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))    
     }
 
     hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${newPassword || currentPassword}`)))
 
     if (email && (newPassword || currentPassword)) {
-      newHash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))
+      newHash = window.btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), ''))
     }
     
     try {
@@ -508,7 +507,7 @@ class JdamClient extends Evt {
       const hashBuffer = new Uint8Array(await crypto.subtle.digest('sha-256', encoder.encode(`${email}${password}`)))
 
       if (email && password) { 
-        hash = btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), '')) 
+        hash = window.btoa(hashBuffer.reduce((data, code) => data + String.fromCharCode(code), '')) 
       }
     }
 

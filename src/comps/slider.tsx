@@ -1,18 +1,26 @@
-import { useState } from 'react'
-import { Slider, SliderProps } from '@material-ui/core'
+import React, {
+  useState,
+  useEffect 
+} from 'react'
 
-import FormField, { FormFieldProps } from './form_field'
+import {
+  Slider, SliderProps 
+} from '@material-ui/core'
+
+import FormFieldDisplay, { FormFieldDisplayProps } from './form_field'
 
 import { makeStyles } from '@material-ui/styles'
 
 const useStyles = makeStyles({
   formSlider: {
+    margin: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'stretch',
     '&.MuiSlider-root': {
       display: 'flex',
-      height: '100%',
       alignItems: 'center',
       paddingTop: '1ch',
-      margin: '0 1em',
       width: 'unset',
       '& .MuiSlider-thumb': {
         marginTop: 'unset'
@@ -21,24 +29,42 @@ const useStyles = makeStyles({
   }
 })
 
-function FormSlider({ min, max, step, fieldValue, setFieldValue, ...props }: FormFieldProps & SliderProps): JSX.Element {
+function FormSliderDisplay({ min, max, step, model, ...props }: FormFieldDisplayProps<number> & SliderProps): JSX.Element {
 
   const classes = useStyles()
 
   const [ inputValue, setInputValue ] = useState<number | number[]>(30)
 
+  useEffect(() => {
+
+    const onSetValue = ({ value }: { value: number }) => {
+      setInputValue(value)
+    }
+
+    model.on('set-value', onSetValue)
+
+    return () => {
+      model.un('set-value', onSetValue)
+    }
+  })
+
   const handleSliderChange = (event: Event, newValue: number | number[]) => {
-    setFieldValue ? setFieldValue('' + newValue) : setInputValue(newValue)
+    if (Array.isArray(newValue)) {
+      model.setValue(newValue[0])
+    } else {
+      model.setValue(newValue)
+    }
   }
 
   return (
-    <FormField
+    <FormFieldDisplay<number>
+      model={ model }
       { ...props }
+      className={ classes.formSlider }
     >
       <Slider
         color="primary"
-        className={ classes.formSlider }
-        value={ Number(fieldValue ?? inputValue) }
+        value={ Number(model.getValue() ?? inputValue) }
         step={ step ?? 10 }
         marks
         onChange={ handleSliderChange }
@@ -46,8 +72,8 @@ function FormSlider({ min, max, step, fieldValue, setFieldValue, ...props }: For
         max={ max ?? 120 }
         valueLabelDisplay="auto"
       />
-    </FormField>
+    </FormFieldDisplay>
   )
 }
 
-export default FormSlider
+export default FormSliderDisplay

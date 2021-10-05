@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react'
+import React, {
+  useEffect, 
+  useState 
+} from 'react'
 import {
   IconButton,
   Button,
@@ -21,7 +24,9 @@ import SettingsIcon from '@material-ui/icons/Settings'
 
 import { makeStyles } from '@material-ui/styles'
 
-import JdamClient, { AudioDeviceType, AudioDeviceDescriptor } from '../client/jdam_client'
+import JdamClient, {
+  AudioDeviceType, AudioDeviceDescriptor 
+} from '../client/jdam_client'
 
 import CloseableDialog from '../comps/closeable_dialog'
 
@@ -224,6 +229,4 @@ function DeviceSelectionDialog({ client, open, ...props }: DeviceSelectionDialog
 }
 
 export default DeviceManager
-export {
-  DeviceSelectionDialog
-}
+export {DeviceSelectionDialog}
