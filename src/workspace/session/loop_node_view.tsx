@@ -1,20 +1,28 @@
+import React, {
+  useEffect, 
+  useState,
+  useRef 
+} from 'react'
+
 import LoopNode from '../../client/loop_node'
 import Sound from '../../client/sound'
 import Transport from '../../client/sound_transport'
 import Session from '../../client/session'
-
-import { useEffect, useState, useRef } from 'react'
 
 import { Paper } from '@material-ui/core'
 
 
 import { makeStyles } from '@material-ui/styles'
 
-import TrackView, { trackHeight, controlsWidth } from './loop_node_track'
+import TrackView, {
+  trackHeight, controlsWidth 
+} from './loop_node_track'
 
 const nodeWidth = 500
 const nodeHeight = 300
-export { nodeWidth, nodeHeight }
+export {
+  nodeWidth, nodeHeight 
+}
 
 const useStyles = makeStyles({
   root: {

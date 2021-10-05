@@ -1,0 +1,35 @@
+{
+  "root": true,
+  "extends": [ "eslint:recommended" ],
+  "env": {
+    "es6": true,
+    "es2020": true,
+    "node": true
+  },
+  "parserOptions": {
+    "sourceType": "module"
+  },
+  "rules": {
+    "indent": ["error", 2],
+    "space-before-blocks": ["error", "always"],
+    "keyword-spacing":["error"],
+    "semi":["error","never"],
+    "comma-spacing": "error",
+    "comma-dangle": ["error", "never"],
+    "block-spacing": ["error", "always"],
+    "array-bracket-spacing": ["error", "always"],
+    "space-infix-ops": ["error"],
+    "no-var": ["error"],
+    "no-unused-vars": ["error", { "args": "after-used" }],
+    "object-curly-newline": ["error", {
+      "ImportDeclaration": { "multiline": true, "minProperties": 2 },
+      "ExportDeclaration": { "multiline": true, "minProperties": 2 }
+    }],
+    "arrow-parens": ["error", "as-needed"],
+    "padding-line-between-statements": [
+      "error",
+      { "blankLine": "always", "prev": "function", "next": "*" },
+      { "blankLine": "always", "prev": "*", "next": "function" }
+    ]
+  }
+}

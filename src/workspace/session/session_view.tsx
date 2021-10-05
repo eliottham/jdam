@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react'
+import React, {
+  useEffect, 
+  useState 
+} from 'react'
 
 import LoopNodeLane from './loop_node_lane'
 import SoundDrawer from './sounds_drawer'

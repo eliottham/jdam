@@ -1,5 +1,9 @@
+import React, {
+  useEffect,
+  useState 
+} from 'react'
+
 import JdamClient from '../client/jdam_client'
-import { useEffect, useState } from 'react'
 import { makeStyles } from '@material-ui/styles'
 import SearchIcon from '@material-ui/icons/Search'
 import PersonAddIcon from '@material-ui/icons/PersonAdd'
@@ -92,7 +96,7 @@ function People({ client }: { client: JdamClient }): JSX.Element {
     }
   }
 
-  const handleSearchOnChange = debounce((e) => {
+  const handleSearchOnChange = debounce(e => {
     client.findAccounts(e.target.value)
   })
 

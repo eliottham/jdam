@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "sourceMap": true,
     "target": "es6",
     "lib": [
       "dom",
@@ -21,7 +22,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react",
-    "baseUrl": "src"
+    "baseUrl": "./src"
   },
   "include": [ "./src/**/*" ],
   "exclude": [ "node_modules" ]

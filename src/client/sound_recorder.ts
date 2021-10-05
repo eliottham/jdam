@@ -1,12 +1,13 @@
 import Transport, { TransportParams } from './sound_transport'
 import Metro from './metro'
 import { Frames } from './sound'
+import { ThisIsCheating } from 'client/types'
 
 /*
  * typescript doesn't have this interface defined even though it's been around
  * for like five years 
  */
-declare const MediaRecorder: any
+declare const MediaRecorder: ThisIsCheating
 
 interface SoundRecorderParams extends TransportParams {
   audioCtx: AudioContext

@@ -1,3 +1,4 @@
+import React from 'react'
 import CloseIcon from '@material-ui/icons/Close'
 
 import { makeStyles } from '@material-ui/styles'
@@ -21,7 +22,7 @@ function CloseButton({ onClick }: { onClick: () => void }) {
   const classes = useStyles()
 
   return (
-    <div className={ classes.root + " flex-center" } onClick={ onClick }>
+    <div className={ classes.root + ' flex-center' } onClick={ onClick }>
       <CloseIcon/>
     </div>
   )

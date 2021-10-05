@@ -1,6 +1,5 @@
-import {
-  DialogProps
-} from '@material-ui/core'
+import React from 'react'
+
 import ArrowBackIcon from '@material-ui/icons/ArrowBack'
 import CloseableDialog, { CloseableDialogProps } from './closeable_dialog'
 

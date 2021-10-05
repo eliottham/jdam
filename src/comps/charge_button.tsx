@@ -1,4 +1,8 @@
-import { useRef, useEffect } from 'react'
+import React, {
+  useRef, 
+  useEffect 
+} from 'react'
+
 import { makeStyles } from '@material-ui/styles'
 
 interface ChargeButtonProps extends React.HTMLAttributes<HTMLDivElement> {

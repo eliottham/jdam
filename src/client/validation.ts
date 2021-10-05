@@ -1,14 +1,18 @@
 import Evt from '../client/evt'
 
-export interface LatentValidation {
-  validate: (input: string) => Promise<void>
+export type LatentStatus = 'pending' | 'complete'
+export type ValidationFunction<ValueType> = (input?: ValueType) => string[]
+
+export interface LatentValidation<ValueType=string> {
+  validate: (value?: ValueType) => Promise<string[]>
   pending: boolean
 }
 
 class CheckAccountAvailable extends Evt implements LatentValidation {
   pending = false
 
-  async validate(email: string) {
+  async validate(email?: string): Promise<string[]> {
+    this.fire('pending', { status: 'pending' })
     if (!this.pending) {
       this.pending = true
       try {
@@ -21,14 +25,18 @@ class CheckAccountAvailable extends Evt implements LatentValidation {
         })
         const responseJson = await response.json()
         this.pending = false
+        this.fire('pending', { status: 'complete' })
         this.fire('validate', responseJson)
-        return 
+        return responseJson.errors || new Array<string>()
       } catch (err) {
         /* do nothing */
       }
       this.pending = false
+      this.fire('pending', { status: 'complete' })
       this.fire('validate', { success: false })
+      return [ 'Unable to check account availability' ]
     }
+    return []
   }
 }
 
@@ -36,13 +44,30 @@ const checkAccountAvailable = new CheckAccountAvailable()
 
 const Validation = {
 
+  validateNonEmpty(input?: string): string[] {
+    if (!input) {
+      return [ 'Field must not be empty' ]
+    }
+    return []
+  },
+
+  validateNonBlank(input?: string): string[] {
+    if (!input) {
+      return []
+    }
+    if (!input.trim()) {
+      return [ 'Field must not be blank' ]
+    }
+    return []
+  },
+
   validatePassword(pass?: string): string[] {
     const errors = []
     if (!pass) { return [] }
     pass = pass.trim() 
-    if (!pass) { return [ 'password must not be blank' ] }
-    if (pass.length < 12) { errors.push('password must be longer than 12 characters') }
-    if (pass.length > 32) { errors.push('you have to be able to remember the password') }
+    if (!pass) { return [ 'Password must not be blank' ] }
+    if (pass.length < 12) { errors.push('Password must be longer than 12 characters') }
+    if (pass.length > 32) { errors.push('You have to be able to remember the password') }
     if (/^[A-Za-z0-9]+$/.test(pass)) { errors.push('password must contain special characters') }
     return errors
   },
@@ -51,7 +76,7 @@ const Validation = {
     const errors = []
     if (!email) { return [] }
     email = email.trim() 
-    if (!email) { return [ 'email must not be blank' ] }
+    if (!email) { return [ 'Email must not be blank' ] }
     if (!/^\w[^@]+@[^.]+\.\w+/.test(email)) { errors.push('email is invalid') }
     return errors
   },
@@ -59,7 +84,7 @@ const Validation = {
   validateNickname(nick?: string): string[] {
     const errors = []
     if (nick && nick.trim()) {
-      if (nick.length > 25) { errors.push('nickname must be less than 25 characters') }
+      if (nick.length > 25) { errors.push('Nickname must be less than 25 characters') }
     }
     return errors
   },
@@ -81,7 +106,7 @@ const Validation = {
        */
       checkAccountAvailable.once('validate', (responseJson: { success: boolean, errors?: string[] }) => {
         const { success } = responseJson 
-        if (!success) { errors.push('account is already in use') }
+        if (!success) { errors.push('Account is already in use') }
         resolve(errors)
       })
     })

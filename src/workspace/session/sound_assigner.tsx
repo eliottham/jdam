@@ -1,13 +1,11 @@
+import React, { useRef } from 'react'
+
 import Session from '../../client/session'
 import Sound from '../../client/sound'
-
-import { useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 
 import { makeStyles } from '@material-ui/styles'
 
 import { AssignSoundIcon } from '../../comps/icons'
-import Draggable from '../../comps/draggable'
 
 const useStyles = makeStyles({
   root: {

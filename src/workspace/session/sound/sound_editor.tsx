@@ -1,24 +1,32 @@
-import { BaseSyntheticEvent, useState, useEffect, useRef } from 'react'
+import React, {
+  BaseSyntheticEvent, 
+  useState,
+  useEffect,
+  useRef 
+} from 'react'
 
-import Session from '../../../client/session'
-import LoopNode from '../../../client/loop_node'
-import Sound, { Frames } from '../../../client/sound'
-import Transport from '../../../client/sound_transport'
+import Session from 'client/session'
+import LoopNode from 'client/loop_node'
+import Sound, { Frames } from 'client/sound'
+import Transport from 'client/sound_transport'
 
-import { NoteIcon } from '../../../comps/icons'
-import SlidingPageDialog from '../../../comps/sliding_page_dialog'
-import CloseableDialog from '../../../comps/closeable_dialog'
-import BigAction from '../../../comps/big_action'
-import FormField from '../../../comps/form_field'
-import Validation from '../../../client/validation'
-import ChargeButton from '../../../comps/charge_button'
+import { NoteIcon } from 'comps/icons'
+import SlidingPageDialog from 'comps/sliding_page_dialog'
+import CloseableDialog from 'comps/closeable_dialog'
+import BigAction from 'comps/big_action'
+import { TextFormFieldDisplay } from 'comps/form_field'
+import { TextFormField } from 'client/forms/form'
+import Validation from 'client/validation'
+import ChargeButton from 'comps/charge_button'
 
 import SoundVisualization from './sound_visualization'
 import StopHandle, { iconSize } from './stop_handle'
 
 import { makeStyles } from '@material-ui/styles'
 
-import { IconButton, Button } from '@material-ui/core'
+import {
+  IconButton, Button 
+} from '@material-ui/core'
 
 import PublishIcon from '@material-ui/icons/Publish'
 import PlayArrowIcon from '@material-ui/icons/PlayArrow'
@@ -27,7 +35,7 @@ import PauseIcon from '@material-ui/icons/Pause'
 import DeleteIcon from '@material-ui/icons/Delete'
 import FiberManualRecordIcon from '@material-ui/icons/FiberManualRecord'
 import SaveAltIcon from '@material-ui/icons/SaveAlt'
-import { WaveformIcon } from '../../../comps/icons'
+import { WaveformIcon } from 'comps/icons'
 
 const soundVisHeight = 256
 
@@ -180,13 +188,19 @@ function SoundEditor({ sound, session, transport }: SoundEditorProps): JSX.Eleme
 
   const ms = Math.max((session.info.ms + 1000) || 0, sound.ms || 0, 1000)
 
+  const [ nameField ] = useState(new TextFormField({
+    name: 'name',
+    value: sound.name,
+    validation: Validation.validateSafeText 
+  }))
+
   const [ stops, setStops ] = useState<number[]>(sound.stops?.slice() || [])
   const [ clip, setClip ] = useState(clipFromStops(session, sound))
   const [ width, setWidth ] = useState(1)
   const [ playhead, setPlayhead ] = useState(transport.playhead)
   const [ playState, setPlayState ] = useState(transport.getPlayState()) 
   const [ showHandles, setShowHandles ] = useState(!!sound.frames?.length)
-  const [ soundName, setSoundName ] = useState(sound.name)
+  const [ , setSoundName ] = useState(sound.name)
   const [ frames, setFrames ] = useState(!!sound.frames?.length)
   const [ soundMs, setSoundMs ] = useState(ms)
   const [ recording, setRecording ] = useState(transport.playState === 'recording')
@@ -225,6 +239,10 @@ function SoundEditor({ sound, session, transport }: SoundEditorProps): JSX.Eleme
       setSoundName(name)
     }
 
+    const onNameFieldChange = ({ value }: { value: string}) => {
+      transport.setSoundName({ sound, name: value })
+    }
+
     const onUpdateSound = ({ sound }: { sound: Sound }) => {
       onSetSoundName({ name: sound.name })
     }
@@ -250,6 +268,7 @@ function SoundEditor({ sound, session, transport }: SoundEditorProps): JSX.Eleme
     sound.on('update-sound', onUpdateSound)
     sound.on('set-sound-frames', onSetSoundFrames)
     sound.on('set-sound-ms', onSetSoundMs)
+    nameField.on('set-value', onNameFieldChange)
 
     return () => {
       transport.un('set-play-state', onSetPlayState)
@@ -262,8 +281,9 @@ function SoundEditor({ sound, session, transport }: SoundEditorProps): JSX.Eleme
       sound.un('update-sound', onUpdateSound)
       sound.un('set-sound-frames', onSetSoundFrames)
       sound.un('set-sound-ms', onSetSoundMs)
+      nameField.un('set-value', onNameFieldChange)
     }
-  }, [ sound, session, transport ])
+  }, [ sound, session, transport, nameField ])
 
   useEffect(() => {
 
@@ -349,10 +369,6 @@ function SoundEditor({ sound, session, transport }: SoundEditorProps): JSX.Eleme
     URL.revokeObjectURL(href)
   }
 
-  const handleChangeSoundName = (newValue: string) => {
-    transport.setSoundName({ sound, name: newValue })
-  }
-
   const existingSound = session.sounds.has(sound.uid)
 
   const onSetPlayhead = (initValue: number, newValue: number) => {
@@ -370,15 +386,11 @@ function SoundEditor({ sound, session, transport }: SoundEditorProps): JSX.Eleme
       ref={ ref }
       className={ classes.root }
     >
-      <FormField
-        name="name"
+      <TextFormFieldDisplay
         noLabel
         fragment
-        fieldValue={ soundName }
-        setFieldValue={ setSoundName }
-        validation={ Validation.validateSafeText }
-        onChange={ handleChangeSoundName }
         className={ classes.nameField }
+        model={ nameField }
       />
       <div className={ classes.vis }>
         { !frames &&
@@ -618,6 +630,4 @@ function SoundEditorDialog({ session, sound, node, open, ...props }: SoundEditor
 }
 
 export default SoundEditor
-export {
-  SoundEditorDialog
-}
+export {SoundEditorDialog}

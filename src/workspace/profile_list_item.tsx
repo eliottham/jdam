@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react'
+import React, {
+  useState, 
+  useEffect 
+} from 'react'
 
-import JdamClient from '../client/jdam_client'
-import Account from '../client/account'
+import JdamClient from 'client/jdam_client'
+import Account from 'client/account'
 
 import AccountSettingsDialog from './account_settings_dialog'
 
@@ -60,11 +63,8 @@ function ProfileListItem({ client }: { client: JdamClient }) {
       </IconButton>
       <AccountSettingsDialog
         open={ openAccountSettings }
-        onClose={ handleOnCloseAccountSettings }
         client={ client }
-        email={ email }
-        nickname={ nickname }
-        avatarId={ avatarId }
+        onClose={ handleOnCloseAccountSettings }
       />
     </ListItem>
   )

@@ -1,10 +1,15 @@
-import { useEffect, useState } from 'react'
+import React, {
+  useEffect, 
+  useState 
+} from 'react'
 
 import { makeStyles } from '@material-ui/styles'
 
 import Session from '../../client/session'
 import LoopNode from '../../client/loop_node'
-import LoopNodeView, { nodeWidth, nodeHeight } from './loop_node_view'
+import LoopNodeView, {
+  nodeWidth, nodeHeight 
+} from './loop_node_view'
 
 import AddIcon from '@material-ui/icons/Add'
 

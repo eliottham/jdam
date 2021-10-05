@@ -1,4 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, {
+  useState,
+  useRef 
+} from 'react'
+
 import { makeStyles } from '@material-ui/styles'
 
 import Draggable from './draggable'

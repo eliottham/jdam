@@ -1,7 +1,11 @@
+import React from 'react'
+
 import { CSSTransition } from 'react-transition-group'
 
 import { makeStyles } from '@material-ui/styles'
-import { useRef, RefObject } from 'react'
+import {
+  useRef, RefObject 
+} from 'react'
 import { Card } from '@material-ui/core'
 
 const useStyles = makeStyles({
@@ -12,6 +16,7 @@ const useStyles = makeStyles({
   errors: {
     '&.MuiCard-root': {
       padding: '1em',
+      margin: '0 1em',
       color: 'white',
       backgroundColor: 'var(--red)',
       borderRadius: 4,
